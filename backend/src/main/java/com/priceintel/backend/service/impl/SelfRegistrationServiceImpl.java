@@ -160,6 +160,21 @@ public class SelfRegistrationServiceImpl implements SelfRegistrationService {
         long cents = amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValueExact();
         String currency = reg.getCurrency() != null ? reg.getCurrency() : "USD";
 
+        // A free plan has nothing to charge for. Stripe refuses a zero-amount
+        // checkout outright ("total amount due cannot be zero in payment mode"),
+        // so signing up on the Free plan ended at an error instead of an
+        // account. Finish here: the workspace is created and ready to use.
+        if (amount.signum() <= 0) {
+            finalizeRegistration(reg, token);
+            return CheckoutResponse.builder().mode("FREE")
+                    .planCode(plan.getCode()).billingCycle(cycle.name())
+                    .amount(BigDecimal.ZERO).currency(currency)
+                    .trialDays(plan.getTrialDays())
+                    .note("No payment needed on the " + plan.getName()
+                            + " plan — the account is ready. Sign in to start.")
+                    .build();
+        }
+
         if (stripeService.isConfigured()) {
             String success = frontendUrl + "/register/success?token=" + token
                     + "&session_id={CHECKOUT_SESSION_ID}";
@@ -236,7 +251,10 @@ public class SelfRegistrationServiceImpl implements SelfRegistrationService {
         int trialDays = plan.getTrialDays();
         LocalDate today = LocalDate.now();
         LocalDate trialEnd = today.plusDays(trialDays);
-        LocalDate periodEnd = trialEnd.plusDays(cycle.getDays());
+        // On a free plan the trial is the whole period — nothing was paid for,
+        // so there is no billing period to add to it.
+        LocalDate periodEnd = com.priceintel.backend.utils.PlanPeriod.accessEnds(
+                priceFor(plan, cycle), trialEnd, cycle);
 
         // NOW create the real tenant.
         Tenant tenant = Tenant.builder()

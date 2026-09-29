@@ -196,6 +196,20 @@ public class OnboardingServiceImpl implements OnboardingService {
 
         String description = plan.getName() + " (" + cycle + ")";
 
+        // Same as self sign-up: nothing to charge on a free plan, and Stripe
+        // rejects a zero-amount checkout, so activate the account here instead.
+        if (amount.signum() <= 0) {
+            finalizeActivation(token);
+            return CheckoutResponse.builder().mode("FREE")
+                    .planCode(plan.getCode()).billingCycle(cycle.name())
+                    .amount(BigDecimal.ZERO)
+                    .currency(tenant.getCurrency() != null ? tenant.getCurrency() : "USD")
+                    .trialDays(plan.getTrialDays())
+                    .note("No payment needed on the " + plan.getName()
+                            + " plan — the account is ready. Sign in to start.")
+                    .build();
+        }
+
         if (stripeService.isConfigured()) {
             String success = r.getSuccessUrl() != null ? r.getSuccessUrl()
                     : frontendUrl + "/onboarding/success?token=" + r.getToken()
@@ -279,7 +293,9 @@ public class OnboardingServiceImpl implements OnboardingService {
         int trialDays = plan.getTrialDays();
         LocalDate today = LocalDate.now();
         LocalDate trialEnd = today.plusDays(trialDays);
-        LocalDate periodEnd = trialEnd.plusDays(cycle.getDays());
+        // Same rule as self sign-up: a free plan's trial is its whole period.
+        LocalDate periodEnd = com.priceintel.backend.utils.PlanPeriod.accessEnds(
+                priceFor(plan, cycle), trialEnd, cycle);
 
         tenant.setSubscriptionStartDate(today);
         tenant.setTrialEndDate(trialDays > 0 ? trialEnd : null);

@@ -226,17 +226,25 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         BillingCycle cycle = requestedCycle != null ? requestedCycle : cycleOf(tenant);
         BigDecimal amount = priceFor(plan, cycle);
 
-        // Nothing to charge — a free plan, or Stripe not set up (dev). Applied now.
-        if (!stripeService.isConfigured() || amount.signum() <= 0) {
+        // A free plan cannot be renewed into another free period — that is what
+        // made "free for 10 days" mean "free for ever": the trial ended, the
+        // Renew button charged nothing, and the clock started again. Moving to
+        // a paid plan is the way on.
+        if (amount.signum() <= 0) {
+            throw new BadRequestException("The " + plan.getName() + " plan cannot be renewed. "
+                    + "Choose a paid plan to carry on — your data is kept either way.");
+        }
+
+        // Stripe not set up (dev): applied immediately so the flow can be tested.
+        if (!stripeService.isConfigured()) {
             LocalDate newEnd = extendPeriod(tenant, plan, cycle);
-            String how = amount.signum() <= 0 ? "free plan" : "Stripe not configured";
             Payment paid = savePayment(tenant, plan, cycle, amount, PaymentType.RENEWAL,
-                    PaymentStatus.PAID, amount.signum() <= 0 ? "free" : "mock", null,
-                    "Renewal applied (" + how + ")");
+                    PaymentStatus.PAID, "mock", null, "Renewal applied (Stripe not configured)");
             paid.setPaidAt(Instant.now());
             paymentRepository.save(paid);
             record(tenant, SubscriptionAction.RENEWED,
-                    "Renewed " + plan.getCode() + " (" + cycle + ") until " + newEnd + " (" + how + ")");
+                    "Renewed " + plan.getCode() + " (" + cycle + ") until " + newEnd
+                            + " (Stripe not configured)");
             notificationService.notifyTenant(tenant.getId(),
                     com.priceintel.backend.constants.NotificationType.PAYMENT_SUCCESS,
                     plan.getName() + " renewed",
