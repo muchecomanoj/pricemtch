@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- Console -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Rolling file: logs/application.log, one file per day, 30 days kept -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/application.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/application.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+      Both appenders are wrapped, because a synchronous one can take the whole
+      application down and twice did.
+
+      Writing a log line held a lock while the write itself blocked, and every
+      request thread queued behind it — 83 of them, parked in
+      OutputStreamAppender.writeBytes. Nothing responded: login "hung and timed
+      out", but so would have everything else. Restarting cleared it and it came
+      back the next day.
+
+      The console is the more dangerous of the two. Started detached, the
+      process writes stdout into a pipe nobody reads; once that pipe's buffer
+      fills, the write never completes. The file appender can stall in the same
+      way when the file is locked or the disk is slow.
+
+      neverBlock="true" is the point of this: when the queue is full the message
+      is dropped instead of parking the caller. Losing a log line is a cost worth
+      paying; freezing every request to record one is not. discardingThreshold=0
+      keeps DEBUG and INFO until the queue is genuinely full, rather than
+      shedding them at 80% as the default does.
+    -->
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="CONSOLE"/>
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>true</neverBlock>
+    </appender>
+
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE"/>
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>true</neverBlock>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
+        <appender-ref ref="ASYNC_FILE"/>
+    </root>
+
+</configuration>

@@ -1,0 +1,39 @@
+# Root .gitignore — backend/ and frontend/ keep their own for Maven/Node specifics.
+
+### Secrets / local env ###
+.env
+.env.local
+.env.*.local
+!.env.example
+
+### Logs ###
+logs/
+*.log
+
+### Python (amazon-scraper) ###
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+amazon-scraper/temp_scraping_sessions/
+
+### Java / Maven ###
+target/
+
+### Node ###
+node_modules/
+dist/
+
+### Claude Code local settings ###
+**/.claude/settings.local.json
+
+### IDEs ###
+.idea/
+.vscode/
+*.iml
+
+### OS ###
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,1569 @@
+@import './variables';
+@import 'bootstrap/scss/bootstrap';
+@import './landing';
+
+// ─────────────────────────────────────────────────────────────────
+// PREMIUM DESIGN SYSTEM
+// Enterprise SaaS look (Stripe / Linear / Vercel inspired).
+// Purely presentational — no markup/logic depends on this file.
+// ─────────────────────────────────────────────────────────────────
+
+:root {
+  --sidebar-width: #{$sidebar-width};
+  --sidebar-collapsed: #{$sidebar-collapsed};
+  --navbar-height: #{$navbar-height};
+
+  --app-bg: #f6f9fc;
+  --card-bg: #ffffff;
+  // The sidebar is black in both themes — it is the one surface that
+  // carries the brand regardless of which mode you are in.
+  --sidebar-bg: #06090f;
+  --sidebar-bg-2: #0a0e15;
+
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border-soft: #dfe7ef;
+  --hover-soft: #e9f4fd;
+
+  // Light mode deepens the sky blue so white button text still clears
+  // 4.5:1. Dark mode below uses the landing page's exact #3fa9f5.
+  --primary: #1b86d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  --grad-primary: linear-gradient(135deg, #3fa9f5, #2b8fd8);
+  --grad-success: linear-gradient(135deg, #10b981, #059669);
+  --grad-warning: linear-gradient(135deg, #f59e0b, #d97706);
+  --grad-danger: linear-gradient(135deg, #ef4444, #dc2626);
+  --grad-info: linear-gradient(135deg, #0ea5e9, #3fa9f5);
+  --grad-purple: linear-gradient(135deg, #62bcff, #2b8fd8);
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.05);
+  --shadow-glow: 0 8px 24px rgba(63, 169, 245, 0.28);
+}
+
+// Dark mode carries the marketing site's exact palette — black canvas,
+// sky-blue signal — so the app the user lands in after signing in looks
+// like the page that sold it to them. Values match _landing.scss 1:1.
+[data-bs-theme='dark'] {
+  --app-bg: #06090f;
+  --card-bg: #0f141c;
+  --sidebar-bg: #04070c;
+  --sidebar-bg-2: #0a0e15;
+  --text-primary: #e8eef6;
+  --text-secondary: #93a3b8;
+  --border-soft: #1e2733;
+  --hover-soft: #161d28;
+  // On black, the accent can sit at full brightness.
+  --primary: #3fa9f5;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+* { -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--app-bg);
+  color: var(--text-primary);
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.011em;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; color: var(--text-primary); }
+.text-muted { color: var(--text-secondary) !important; }
+a { text-decoration: none; }
+
+// ── App shell ────────────────────────────────────────────────────
+.app-shell { display: flex; min-height: 100vh; }
+
+.app-sidebar {
+  width: var(--sidebar-width);
+  background: linear-gradient(180deg, var(--sidebar-bg), var(--sidebar-bg-2));
+  color: #cbd5e1;
+  position: fixed;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s ease;
+  z-index: 1030;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+}
+.app-sidebar.collapsed { width: var(--sidebar-collapsed); }
+
+.sidebar-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; padding: 0.9rem 1rem;
+}
+// The rail is only 84px wide, so at that size the mark and the button stack
+// instead of being squeezed off the edge.
+.collapsed .sidebar-head { flex-direction: column; padding: 0.9rem 0.5rem; gap: 0.65rem; }
+
+.sidebar-collapse-btn {
+  display: none; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 0.45rem;
+  align-items: center; justify-content: center;
+  border: 1px solid rgba(160, 190, 225, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a9bacd; cursor: pointer;
+  transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+@media (min-width: 992px) { .sidebar-collapse-btn { display: inline-flex; } }
+.sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.11); color: #fff; border-color: rgba(160, 190, 225, 0.34);
+}
+.sidebar-collapse-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.35); }
+
+// Which workspace you are signed into.
+.workspace-chip {
+  display: flex; align-items: center; gap: 0.55rem; width: 100%;
+  padding: 0.55rem 0.7rem; border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.05); color: #e2e8f0; text-decoration: none;
+  transition: background 0.16s;
+}
+.workspace-chip:not(.is-static):hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+.workspace-chip.is-static { cursor: default; }
+.workspace-chip__mark {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 0.4rem;
+  background: var(--grad-info); color: #04121f;
+  font-size: 11px; font-weight: 800; letter-spacing: -0.01em;
+}
+.collapsed .workspace-chip { justify-content: center; padding: 0.55rem 0; }
+
+// The nav is taller than most viewports, so the fact that it scrolls has to be
+// visible. At 6px and 8% white the thumb was undetectable on a dark rail, and
+// the items below the fold — Alerts, Reports, Settings — looked absent rather
+// than merely out of view.
+.sidebar-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(160, 190, 225, 0.3) transparent;
+  // Fades the last row as it leaves the viewport, so a cut-off item reads as
+  // "there is more" rather than as the end of the list.
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent 100%);
+}
+.sidebar-scroll::-webkit-scrollbar { width: 8px; }
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(160, 190, 225, 0.28); border-radius: 8px;
+  border: 2px solid transparent; background-clip: content-box;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb { background: rgba(160, 190, 225, 0.45); background-clip: content-box; }
+
+.sidebar-group-label {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em;
+  font-weight: 600; color: #64748b; padding: 0.5rem 1.35rem 0.35rem; white-space: nowrap;
+}
+
+.app-sidebar .nav-link {
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.62rem 0.85rem; margin: 0.12rem 0.7rem; border-radius: 0.7rem;
+  color: #94a3b8; font-weight: 500; font-size: 0.9rem; white-space: nowrap;
+  position: relative; transition: background 0.18s, color 0.18s, transform 0.12s;
+}
+.app-sidebar .nav-link svg { flex-shrink: 0; }
+.app-sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.app-sidebar .nav-link.active {
+  background: linear-gradient(135deg, rgba(63,169,245,0.9), rgba(43,143,216,0.9));
+  color: #fff; box-shadow: 0 6px 18px rgba(63, 169, 245, 0.35);
+}
+.app-sidebar .nav-link.active::before {
+  content: ''; position: absolute; left: -0.7rem; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 3px; background: #fff;
+}
+// Master Data submenu (nested links)
+.app-sidebar .submenu {
+  margin: 0.1rem 0.7rem 0.35rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  animation: submenu-in 0.2s ease;
+}
+.app-sidebar .submenu-link {
+  margin: 0.1rem 0; padding: 0.5rem 0.75rem; font-size: 0.85rem;
+}
+.app-sidebar .submenu-link.active {
+  background: rgba(63, 169, 245, 0.18); color: #fff; box-shadow: none;
+}
+.app-sidebar .submenu-link.active::before { display: none; }
+@keyframes submenu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+// Collapsed rail hides the submenu (it needs labels).
+.collapsed .submenu { display: none; }
+
+.collapsed .nav-link { justify-content: center; margin: 0.12rem 0.6rem; }
+.collapsed .sidebar-label, .collapsed .sidebar-group-label,
+.collapsed .workspace-meta { display: none; }
+
+.app-main {
+  flex: 1; margin-left: var(--sidebar-width); min-width: 0;
+  transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex; flex-direction: column;
+}
+.app-main.collapsed { margin-left: var(--sidebar-collapsed); }
+
+// ── Navbar ───────────────────────────────────────────────────────
+.app-navbar {
+  height: var(--navbar-height);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--border-soft);
+  position: sticky; top: 0; z-index: 1020;
+}
+[data-bs-theme='dark'] .app-navbar { background: rgba(15, 20, 28, 0.72); }
+
+
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 0.7rem; border: 1px solid var(--border-soft);
+  background: var(--card-bg); color: var(--text-secondary);
+  display: inline-flex; align-items: center; justify-content: center; position: relative;
+  transition: all 0.16s;
+}
+.icon-btn:hover { background: var(--hover-soft); color: var(--primary); border-color: transparent; }
+
+// ── Navbar account menu ──────────────────────────────────────────
+// The chip is the trigger; the menu carries Profile, user management and
+// Logout — the sidebar no longer has a sign-out control.
+.profile-chip {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  padding: 0.3rem 0.55rem; border: 1px solid transparent; border-radius: 0.7rem;
+  background: transparent; color: var(--text-primary);
+  transition: background 0.16s, border-color 0.16s;
+}
+.profile-chip:hover, .profile-chip.is-open { background: var(--hover-soft); border-color: var(--border-soft); }
+.profile-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.22); }
+
+.profile-menu {
+  position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 1030;
+  min-width: 232px; padding: 0.4rem;
+  background: var(--card-bg); border: 1px solid var(--border-soft);
+  border-radius: 0.9rem; box-shadow: var(--shadow-lg);
+  animation: profile-menu-in 0.16s ease;
+}
+@keyframes profile-menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.profile-menu__head {
+  padding: 0.6rem 0.75rem 0.7rem; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.profile-menu__item {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left;
+  padding: 0.6rem 0.75rem; border: none; background: transparent; border-radius: 0.6rem;
+  color: var(--text-primary); font-size: 0.92rem; font-weight: 500;
+  transition: background 0.14s, color 0.14s;
+}
+.profile-menu__item svg { flex-shrink: 0; color: var(--text-secondary); transition: color 0.14s; }
+.profile-menu__item:hover { background: var(--hover-soft); color: var(--primary); }
+.profile-menu__item:hover svg { color: var(--primary); }
+.profile-menu__item:focus-visible { outline: none; background: var(--hover-soft); }
+.profile-menu__item.is-danger:hover { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+.profile-menu__item.is-danger:hover svg { color: var(--danger); }
+.profile-menu__sep { height: 1px; background: var(--border-soft); margin: 0.35rem 0.25rem; }
+
+// ── Inline note beside a control ─────────────────────────────────
+// Lighter than an .alert, which would span the row and outweigh the control
+// it belongs to — but with enough weight that a caution doesn't read as
+// helper text. The left rule carries the severity.
+.field-note {
+  display: inline-flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.55rem 0.8rem; max-width: 34rem;
+  border-radius: 0.5rem; font-size: 0.85rem; line-height: 1.45;
+  background: var(--app-bg); color: var(--text-secondary);
+  border: 1px solid var(--border-soft); border-left: 2px solid var(--text-secondary);
+}
+.field-note svg { flex-shrink: 0; margin-top: 2px; }
+.field-note strong { color: var(--text-primary); font-weight: 700; }
+
+.field-note--warn {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  border-left-color: var(--warning);
+  color: var(--text-primary);
+}
+.field-note--warn svg { color: var(--warning); }
+
+// A field that is part of an unmet "fill one of these" rule. Amber rather than
+// the red of .is-invalid: nothing in it is wrong, the group is just empty.
+.form-control.field-needs { border-color: var(--warning); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12); }
+
+// ── Subscription banner ─────────────────────────────────────────
+// Amber while a plan is in its grace period; red once it has gone read-only,
+// because that is the state where buttons disappear and people need telling why.
+.subscription-banner {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-bottom: 1rem; padding: 0.7rem 1rem; border-radius: 0.75rem; font-size: 0.88rem;
+  background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35);
+  color: var(--text-primary);
+}
+.subscription-banner svg { color: var(--warning); flex-shrink: 0; }
+.subscription-banner--locked { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.35); }
+.subscription-banner--locked svg { color: var(--danger); }
+
+// ── Product draft form (add from a listing) ─────────────────────
+// Sections with a quiet heading and a rule between them, so a form of ten
+// fields reads as four decisions instead of one undivided grid.
+.draft-section { padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-soft); }
+.draft-section:first-child { padding-top: 0; margin-top: 0; border-top: 0; }
+.draft-section__title {
+  display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.draft-section__aside { font-size: 0.72rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+// A collapsible group with a real edge, instead of a link and a paragraph.
+.draft-panel { border: 1px solid var(--border-soft); border-radius: 0.75rem; overflow: hidden; }
+.draft-panel__head {
+  width: 100%; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem 0.9rem; border: 0; text-align: left; cursor: pointer;
+  background: var(--app-bg); color: var(--text-primary); font-size: 0.88rem; font-weight: 600;
+}
+.draft-panel__head:hover { background: var(--hover-soft); }
+.draft-panel__badge {
+  font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 999px;
+  background: var(--card-bg); border: 1px solid var(--border-soft); color: var(--text-secondary);
+}
+.draft-panel__hint { margin-left: auto; font-size: 0.78rem; font-weight: 400; color: var(--text-secondary); }
+.draft-panel__body { padding: 0.9rem; border-top: 1px solid var(--border-soft); }
+@media (max-width: 575.98px) { .draft-panel__hint { display: none; } }
+
+// An identifier as a labelled pill: the type is what makes the digits mean anything.
+// The listing a draft is built from, as one quiet line above the form.
+.draft-source {
+  display: flex; align-items: center; gap: 0.6rem; min-width: 0;
+  padding: 0.55rem 0.8rem; border-radius: 0.6rem; font-size: 0.85rem;
+  background: var(--app-bg); border: 1px solid var(--border-soft); color: var(--text-secondary);
+}
+
+.ident-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;
+  padding: 0.25rem 0.6rem; border-radius: 0.5rem;
+  background: var(--app-bg); border: 1px solid var(--border-soft); color: var(--text-primary);
+}
+.ident-chip__type { font-size: 0.68rem; font-weight: 700; color: var(--text-secondary); }
+
+// ── Marketplace logo badge ───────────────────────────────────────
+// Brand marks so Amazon and eBay results are told apart before anything is read.
+.mp-logo {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.55rem; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 700; line-height: 1.3; white-space: nowrap;
+  background: var(--card-bg); border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+}
+.mp-logo--amazon { letter-spacing: -0.01em; }
+// The storefront, as a quiet tag: it separates two otherwise identical rows
+// without competing with the brand mark it follows.
+.mp-logo__cc {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 0 0.28rem; border-radius: 0.3rem;
+  background: var(--hover-soft); color: var(--text-secondary);
+}
+.mp-logo--amazon svg { color: #ff9900; }
+.mp-logo--ebay { font-size: 0.9rem; letter-spacing: -0.04em; }
+.mp-logo--ebay b { font-weight: 800; }
+.mp-logo--ebay .e { color: #e53238; }
+.mp-logo--ebay .b { color: #0064d2; }
+.mp-logo--ebay .a { color: #f5af02; }
+.mp-logo--ebay .y { color: #86b817; }
+
+// ── Notification bell dropdown ───────────────────────────────────
+.notif-panel {
+  position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 1030;
+  width: 380px; max-width: calc(100vw - 2rem);
+  background: var(--card-bg); border: 1px solid var(--border-soft);
+  border-radius: 0.9rem; box-shadow: var(--shadow-lg); overflow: hidden;
+}
+.notif-panel__head, .notif-panel__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-soft);
+}
+.notif-panel__foot { border-bottom: none; border-top: 1px solid var(--border-soft); justify-content: center; }
+.notif-panel__body { max-height: 380px; overflow-y: auto; }
+
+.notif-item {
+  display: flex; align-items: flex-start; gap: 0.7rem; width: 100%; text-align: left;
+  padding: 0.75rem 1rem; border: none; background: transparent; color: var(--text-primary);
+  border-bottom: 1px solid var(--border-soft); transition: background 0.14s;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--hover-soft); }
+.notif-item.is-unread { background: rgba(63, 169, 245, 0.05); }
+.notif-item.is-unread:hover { background: var(--hover-soft); }
+.notif-item__icon {
+  flex-shrink: 0; display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 0.6rem;
+}
+.notif-item__text { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; line-height: 1.35; }
+.notif-item__dot {
+  flex-shrink: 0; width: 8px; height: 8px; margin-top: 0.4rem;
+  border-radius: 50%; background: var(--primary);
+}
+
+.app-content { padding: 1.75rem; flex-grow: 1; }
+
+// ── Cards ────────────────────────────────────────────────────────
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: $border-radius-xl;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s;
+}
+.card-hover:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); border-color: rgba(63,169,245,0.18); }
+.card-header { border-bottom: 1px solid var(--border-soft); padding: 1.05rem 1.35rem; background: transparent; }
+.card-body { padding: 1.35rem; }
+.card-title, .card h6 { font-family: $headings-font-family; }
+
+// Glass card variant
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+[data-bs-theme='dark'] .glass { background: rgba(15, 20, 28, 0.6); border-color: rgba(255,255,255,0.08); }
+
+// ── KPI / stats cards ────────────────────────────────────────────
+.stats-card { position: relative; overflow: hidden; }
+// NOTE: intentionally NOT scoped to .stats-card — this badge is reused across
+// onboarding, settings and detail pages. Scoping it made those render as a
+// full-width gradient bar (no width/height applied).
+.icon-box {
+  width: 52px; height: 52px; flex-shrink: 0; border-radius: 0.95rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; color: #fff; box-shadow: var(--shadow-md);
+}
+.icon-grad-primary { background: var(--grad-primary); }
+.icon-grad-success { background: var(--grad-success); }
+.icon-grad-warning { background: var(--grad-warning); }
+.icon-grad-danger  { background: var(--grad-danger); }
+.icon-grad-info    { background: var(--grad-info); }
+.icon-grad-purple  { background: var(--grad-purple); }
+// Fallback: .icon-box sets color:#fff, so an unknown grad name would render a
+// white icon on a white card. Keep this last so named variants win.
+.icon-box:not([class*='icon-grad-']) { background: var(--grad-primary); }
+
+.trend-pill {
+  font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.2rem;
+}
+.trend-up   { color: #059669; background: rgba(16, 185, 129, 0.12); }
+.trend-down { color: #dc2626; background: rgba(239, 68, 68, 0.12); }
+.kpi-value { font-family: $headings-font-family; font-weight: 700; font-size: 1.65rem; line-height: 1.1; }
+
+// ── Buttons ──────────────────────────────────────────────────────
+.btn { border-radius: 0.7rem; font-weight: 600; font-size: 0.9rem; padding: 0.5rem 1rem; transition: all 0.16s ease; }
+.btn:active { transform: translateY(1px) scale(0.99); }
+// Sky blue is a light accent: white label text on it lands near 2.6:1.
+// Dark ink clears 6:1 and matches how the marketing site sets its buttons.
+.btn-primary { background: var(--grad-primary); border: none; color: #04121f; box-shadow: 0 4px 14px rgba(63,169,245,0.28); }
+.btn-primary:hover { color: #04121f; box-shadow: 0 8px 22px rgba(63,169,245,0.4); transform: translateY(-1px); }
+.btn-primary:disabled, .btn-primary.disabled { color: #04121f; }
+.btn-success { background: var(--grad-success); border: none; }
+.btn-danger  { background: var(--grad-danger); border: none; }
+.btn-light {
+  background: var(--card-bg); border: 1px solid var(--border-soft); color: var(--text-primary);
+}
+.btn-light:hover { background: var(--hover-soft); color: var(--primary); border-color: transparent; }
+.btn-ghost { background: transparent; border: none; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--hover-soft); color: var(--primary); }
+.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.82rem; }
+
+// ── Tables ───────────────────────────────────────────────────────
+.table { border-color: var(--border-soft); margin-bottom: 0; }
+.table > :not(caption) > * > * { background: transparent; color: var(--text-primary); }
+.table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--app-bg) !important; color: var(--text-secondary) !important;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-soft);
+}
+.table tbody tr { transition: background 0.14s; }
+.table tbody tr:hover td { background: var(--hover-soft); }
+.table tbody td { padding: 0.85rem 1rem; vertical-align: middle; border-color: var(--border-soft); }
+.table-responsive { border-radius: $border-radius-lg; }
+
+// ── Badges ───────────────────────────────────────────────────────
+.badge { font-weight: 600; padding: 0.4em 0.75em; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.01em; }
+// Soft solid pastels — clearly visible on white cards with strong text contrast.
+.text-bg-success   { background: #d1fae5 !important; color: #047857 !important; }
+.text-bg-warning   { background: #fef3c7 !important; color: #b45309 !important; }
+.text-bg-danger    { background: #fee2e2 !important; color: #b91c1c !important; }
+.text-bg-info      { background: #e0f2fe !important; color: #0369a1 !important; }
+.text-bg-primary   { background: #dbeafe !important; color: #1668a3 !important; }
+.text-bg-secondary { background: #eef2f7 !important; color: #475569 !important; }
+
+// Dark mode: use translucent tints so pills sit well on dark cards.
+[data-bs-theme='dark'] {
+  .text-bg-success   { background: rgba(16,185,129,0.22) !important; color: #6ee7b7 !important; }
+  .text-bg-warning   { background: rgba(245,158,11,0.22) !important; color: #fcd34d !important; }
+  .text-bg-danger    { background: rgba(239,68,68,0.22) !important; color: #fca5a5 !important; }
+  .text-bg-info      { background: rgba(14,165,233,0.22) !important; color: #7dd3fc !important; }
+  .text-bg-primary   { background: rgba(63,169,245,0.24) !important; color: #9fd6ff !important; }
+  .text-bg-secondary { background: rgba(148,163,184,0.20) !important; color: #cbd5e1 !important; }
+}
+
+// ── Forms ────────────────────────────────────────────────────────
+.form-control, .form-select {
+  border-radius: 0.7rem; border: 1px solid var(--border-soft);
+  padding: 0.6rem 0.85rem; background: var(--card-bg); color: var(--text-primary);
+  transition: border 0.16s, box-shadow 0.16s;
+}
+// `color` must be restated: Bootstrap's own :focus rule sets it to
+// --bs-body-color, which does not track our --text-primary. Where the two
+// disagree — a dark surface while the app is in light mode — the caret text
+// turns invisible until the field loses focus.
+.form-control:focus, .form-select:focus {
+  border-color: var(--primary); box-shadow: 0 0 0 3px rgba(63,169,245,0.14);
+  background: var(--card-bg); color: var(--text-primary);
+}
+.form-label { font-weight: 600; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.35rem; }
+
+// Read-only inputs must not look editable. Bootstrap 5.3 styles :disabled only,
+// and the .form-control background above would mask it in any case.
+.form-control[readonly], .form-select[readonly] {
+  background: var(--app-bg); color: var(--text-secondary); cursor: default;
+}
+.form-control[readonly]:focus, .form-select[readonly]:focus {
+  border-color: var(--border-soft); box-shadow: none;
+}
+.input-group-text { background: var(--app-bg); border-color: var(--border-soft); color: var(--text-secondary); border-radius: 0.7rem; }
+.nav-tabs { border-bottom: 1px solid var(--border-soft); gap: 0.25rem; }
+.nav-tabs .nav-link { border: none; color: var(--text-secondary); font-weight: 600; border-radius: 0.6rem 0.6rem 0 0; padding: 0.6rem 1rem; }
+.nav-tabs .nav-link.active { color: var(--primary); background: transparent; border-bottom: 2px solid var(--primary); }
+
+// Two-line clamp for table cells holding long names. Needs a max-width on the
+// element itself — in an auto-layout table the column otherwise widens to fit
+// the longest single line and the clamp never engages.
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+// Advisory AI judgement on a candidate pair. The reason gets real reading
+// weight: the decision is a colour, the reason is what lets a reviewer act
+// without opening the marketplace.
+.ai-verdict__reason {
+  display: block; margin: 0.35rem 0 0;
+  font-size: 0.82rem; line-height: 1.45; color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+// In a table cell the reason is clamped; the full text is on the title attr.
+td .ai-verdict__reason {
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+
+// ── Selectable chips (multi-select replacement) ──────────────────
+.marketplace-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+  padding: 0.5rem 0.9rem; border-radius: 0.7rem; font-size: 0.88rem; font-weight: 500;
+  border: 1px solid var(--border-soft); background: var(--card-bg); color: var(--text-secondary);
+  user-select: none; transition: all 0.15s ease;
+}
+.marketplace-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.marketplace-chip:hover { border-color: var(--primary); background: var(--hover-soft); color: var(--primary); }
+// Dark ink on the accent, same as .btn-primary — white lands near 2.6:1 here.
+.marketplace-chip:has(input:checked) {
+  background: var(--grad-primary); border-color: transparent; color: #04121f;
+  box-shadow: 0 4px 12px rgba(63, 169, 245, 0.28);
+}
+.marketplace-chip:has(input:checked):hover { color: #04121f; }
+// Keyboard users get no focus ring otherwise — the real input is offscreen.
+.marketplace-chip:has(input:focus-visible) {
+  outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.3);
+}
+
+// ── Unified search field (Search Product) ────────────────────────
+// Select + input + submit rendered as one rounded shell so the whole
+// control reads as a single search bar.
+.search-field {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.9rem;
+  border: 1px solid var(--border-soft); border-radius: 0.9rem;
+  background: var(--card-bg); transition: border 0.16s, box-shadow 0.16s;
+}
+.search-field:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(63,169,245,0.14); }
+.search-field.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+.search-field__key {
+  flex-shrink: 0; border: none; outline: none; background: transparent; cursor: pointer;
+  color: var(--text-primary); font-weight: 600; font-size: 0.88rem; padding: 0.4rem 0.25rem 0.4rem 0;
+}
+.search-field__divider { flex-shrink: 0; width: 1px; align-self: stretch; margin: 0.3rem 0; background: var(--border-soft); }
+// Sits with the key select, not with the Search button — it is part of what is
+// being asked for, so it is deliberately quieter than the key it follows.
+.search-field__count {
+  flex-shrink: 0; display: flex; align-items: center; gap: 0.3rem;
+  color: var(--text-secondary); font-size: 0.82rem; white-space: nowrap;
+}
+// Wide enough for three digits plus the native spinner, and fixed, so typing
+// 9 -> 100 never shunts the Search button sideways under the cursor.
+.search-field__count-input {
+  width: 3.6rem; border: none; outline: none; background: transparent;
+  color: var(--text-primary); font-size: 0.85rem; font-weight: 600;
+  padding: 0.4rem 0 0.4rem 0.15rem; text-align: right;
+}
+.search-field__icon { flex-shrink: 0; color: var(--text-secondary); }
+.search-field__input {
+  flex: 1 1 auto; min-width: 0; border: none; outline: none; background: transparent;
+  color: var(--text-primary); font-size: 0.95rem; padding: 0.5rem 0.25rem;
+}
+.search-field__input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+.search-field__clear {
+  flex-shrink: 0; display: grid; place-items: center; width: 28px; height: 28px;
+  border: none; border-radius: 50%; background: transparent; color: var(--text-secondary);
+}
+.search-field__clear:hover { background: var(--hover-soft); color: var(--primary); }
+
+@media (max-width: 575.98px) {
+  .search-field { flex-wrap: wrap; padding: 0.7rem; }
+  .search-field__divider { display: none; }
+  .search-field__input { flex: 1 1 100%; order: 3; }
+  .search-field .btn { flex: 1 1 100%; order: 4; justify-content: center; }
+}
+
+// Full width on its own row, matching the search bar above it — the two are
+// alternative ways in, so neither should look like the lesser option.
+.search-image { width: 100%; }
+.search-image__label {
+  display: block; margin-bottom: 0.3rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.search-image .upload-drop { padding: 0.45rem 0.7rem; }
+.search-image .upload-drop span { font-size: 0.76rem; }
+
+// Where to look. Lighter than the bar above, because these narrow a search
+// rather than define one.
+// flex-start, NOT flex-end: the fields carry a hint line underneath and they
+// are not all the same height, so aligning bottoms drops any field without a
+// hint half a row below its neighbours. Tops always line up; bottoms do not.
+.search-scope { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem 1.5rem; }
+// Region and Marketplace stay on one line together, sharing the width evenly
+// rather than wrapping the moment the card narrows.
+.search-scope { flex-wrap: nowrap; }
+.search-scope__field { flex: 1 1 0; min-width: 0; max-width: 320px; }
+.search-scope__field .form-label { font-size: 0.72rem; margin-bottom: 0.25rem; }
+.search-scope__field .form-text { margin-top: 0.3rem; font-size: 0.72rem; line-height: 1.3; }
+
+@media (max-width: 575.98px) {
+  // Below this the two selects genuinely do not fit side by side.
+  .search-scope { flex-wrap: wrap; }
+  .search-scope__field { flex: 1 1 100%; max-width: none; }
+}
+
+// ── Image upload drop target ─────────────────────────────────────
+.upload-drop {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; cursor: pointer;
+  padding: 0.62rem 0.85rem; border-radius: 0.7rem; font-size: 0.88rem;
+  border: 1px dashed var(--border-soft); background: var(--app-bg); color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+.upload-drop:hover { border-color: var(--primary); background: var(--hover-soft); color: var(--primary); }
+.upload-drop.has-file { border-style: solid; border-color: var(--primary); color: var(--primary); }
+.upload-drop input { display: none; }
+
+// ── Combobox (text input + suggestion list) ──────────────────────
+.combo { position: relative; }
+.combo__input { padding-right: 2.25rem; }
+.combo__toggle {
+  position: absolute; top: 50%; right: 0.4rem; transform: translateY(-50%);
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border: none; border-radius: 0.45rem; background: transparent; color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.combo__toggle:hover:not(:disabled) { background: var(--hover-soft); color: var(--primary); }
+.combo__toggle--clear:hover { color: var(--danger); }
+.combo__menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 224px; overflow-y: auto;
+  margin: 0; padding: 0.3rem; list-style: none;
+  background: var(--card-bg); border: 1px solid var(--border-soft);
+  border-radius: 0.75rem; box-shadow: var(--shadow-lg);
+}
+.combo__option {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  width: 100%; text-align: left; border: none; background: transparent;
+  padding: 0.45rem 0.6rem; border-radius: 0.5rem;
+  font-size: 0.88rem; color: var(--text-primary);
+}
+.combo__option.is-active { background: var(--hover-soft); color: var(--primary); }
+
+// ── Company profile ──────────────────────────────────────────────
+.company-hero {
+  display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+  padding: 1.4rem 1.5rem; margin-bottom: 1.25rem;
+  border-radius: 1.1rem; border: 1px solid var(--border-soft);
+  background:
+    radial-gradient(620px 220px at 8% -30%, rgba(63, 169, 245, 0.10), transparent 65%),
+    radial-gradient(520px 200px at 92% -20%, rgba(139, 92, 246, 0.10), transparent 65%),
+    var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+.company-hero__logo {
+  flex-shrink: 0; width: 84px; height: 84px; overflow: hidden;
+  display: grid; place-items: center;
+  border-radius: 1rem; border: 1px solid var(--border-soft); background: var(--app-bg);
+}
+.company-hero__logo img { width: 100%; height: 100%; object-fit: contain; }
+.company-hero__name { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+
+// Icon + label heading that splits a long form into readable groups.
+.form-section {
+  display: flex; align-items: center; gap: 0.55rem;
+  margin-top: 0.35rem; padding-top: 1rem; border-top: 1px solid var(--border-soft);
+}
+.form-section--first { padding-top: 0; border-top: none; margin-top: 0; }
+.form-section__icon {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 0.55rem;
+  background: var(--hover-soft); color: var(--primary);
+}
+.form-section__title { font-size: 0.9rem; font-weight: 650; letter-spacing: -0.01em; }
+
+// ── Match review ─────────────────────────────────────────────────
+// Page-scoped surface: soft gradient wash instead of flat white, so elevated
+// cards read as elevated. Scoped to .mr-page so no other screen shifts.
+.mr-page {
+  margin: -1.75rem; padding: 1.75rem; min-height: calc(100vh - var(--navbar-height));
+  background:
+    radial-gradient(1100px 460px at 12% -8%, rgba(63, 169, 245, 0.07), transparent 60%),
+    radial-gradient(900px 420px at 92% 4%, rgba(139, 92, 246, 0.07), transparent 62%),
+    var(--app-bg);
+}
+[data-bs-theme='dark'] .mr-page {
+  background:
+    radial-gradient(1100px 460px at 12% -8%, rgba(63, 169, 245, 0.14), transparent 60%),
+    radial-gradient(900px 420px at 92% 4%, rgba(139, 92, 246, 0.12), transparent 62%),
+    var(--app-bg);
+}
+
+.mr-title { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.mr-eyebrow {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+// ── KPI tiles ────────────────────────────────────────────────────
+.mr-kpi {
+  display: flex; align-items: center; gap: 0.9rem; height: 100%;
+  padding: 1.1rem 1.2rem; border-radius: 1.1rem;
+  background: var(--card-bg); border: 1px solid transparent;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.mr-kpi:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(15, 23, 42, 0.09); }
+[data-bs-theme='dark'] .mr-kpi { border-color: var(--border-soft); box-shadow: none; }
+.mr-kpi__icon {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 46px; height: 46px; border-radius: 0.9rem;
+}
+.mr-kpi__value { font-size: 1.6rem; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.mr-kpi__label { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+// ── Glass toolbar ────────────────────────────────────────────────
+.mr-toolbar {
+  position: sticky; top: var(--navbar-height); z-index: 4;
+  padding: 0.55rem 0.7rem; margin-bottom: 1.5rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+[data-bs-theme='dark'] .mr-toolbar { background: rgba(15, 20, 28, 0.78); box-shadow: none; border: 1px solid var(--border-soft); }
+
+// Segmented sort control — three fixed options read better as a pill group
+// than a dropdown, and the active state is visible without opening anything.
+.mr-segment {
+  display: inline-flex; align-items: center; gap: 0.15rem;
+  padding: 0.22rem; border-radius: 0.8rem; background: var(--app-bg);
+}
+.mr-segment__btn {
+  border: none; background: transparent; color: var(--text-secondary);
+  padding: 0.42rem 0.85rem; border-radius: 0.62rem;
+  font-size: 0.8rem; font-weight: 600; line-height: 1; white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.mr-segment__btn:hover:not(.is-active) { color: var(--text-primary); }
+.mr-segment__btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.22); }
+.mr-segment__btn.is-active {
+  background: var(--card-bg); color: var(--primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+[data-bs-theme='dark'] .mr-segment__btn.is-active { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+
+// ── Candidate card ───────────────────────────────────────────────
+.mr-card {
+  position: relative; height: 100%; display: flex; flex-direction: column;
+  padding: 1.5rem; border-radius: 1.25rem;
+  background: var(--card-bg); border: 1px solid transparent;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  animation: mr-rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+[data-bs-theme='dark'] .mr-card { border-color: var(--border-soft); box-shadow: none; }
+.mr-card:hover {
+  transform: translateY(-4px); box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
+  border-color: rgba(63, 169, 245, 0.28);
+}
+.mr-card.has-conflicts { border-color: rgba(245, 158, 11, 0.35); }
+.mr-card.is-selected { border-color: var(--primary); background: linear-gradient(180deg, rgba(63, 169, 245, 0.05), transparent 40%), var(--card-bg); }
+.mr-card.is-deciding { opacity: 0.5; pointer-events: none; }
+
+@keyframes mr-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.mr-card__title { font-size: 1.06rem; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em; }
+.mr-card__price { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.mr-card__meta { font-size: 0.8rem; color: var(--text-secondary); }
+
+// Connector between the listing and our product.
+.mr-link {
+  position: relative; margin: 1.15rem 0 0.9rem; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mr-link::before {
+  content: ''; position: absolute; left: 50%; top: -0.35rem; bottom: -0.35rem; width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, var(--border-soft) 22%, var(--border-soft) 78%, transparent);
+}
+.mr-link__badge {
+  position: relative; display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.2rem 0.6rem; border-radius: 999px;
+  background: var(--app-bg); color: var(--text-secondary);
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.mr-target {
+  display: flex; align-items: center; gap: 0.7rem; min-width: 0;
+  padding: 0.85rem 1rem; border-radius: 0.9rem; background: var(--app-bg);
+}
+
+// ── Soft pill system (no hard borders) ───────────────────────────
+.mr-pill {
+  display: inline-flex; align-items: center; gap: 0.32rem;
+  padding: 0.28rem 0.6rem; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; line-height: 1.2; white-space: nowrap;
+}
+.mr-pill--blue   { background: rgba(63, 169, 245, 0.10);  color: #1668a3; }
+.mr-pill--green  { background: rgba(16, 185, 129, 0.12); color: #047857; }
+.mr-pill--purple { background: rgba(139, 92, 246, 0.12); color: #6d28d9; }
+.mr-pill--orange { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+.mr-pill--red    { background: rgba(239, 68, 68, 0.12);  color: #b91c1c; }
+.mr-pill--slate  { background: rgba(100, 116, 139, 0.13); color: #475569; }
+[data-bs-theme='dark'] {
+  .mr-pill--blue   { color: #9fd6ff; }
+  .mr-pill--green  { color: #6ee7b7; }
+  .mr-pill--purple { color: #c4b5fd; }
+  .mr-pill--orange { color: #fcd34d; }
+  .mr-pill--red    { color: #fca5a5; }
+  .mr-pill--slate  { color: #cbd5e1; }
+}
+
+// ── Action buttons ───────────────────────────────────────────────
+// Three equal buttons with breathing room. Compact enough that they still fit
+// one line in a 3-column card.
+.mr-actions { display: flex; gap: 0.4rem; }
+.mr-actions .mr-btn { flex: 1 1 0; min-width: 0; }
+
+.mr-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+  height: 36px; padding: 0 0.5rem; border: none; border-radius: 0.6rem;
+  font-size: 0.8rem; font-weight: 600; line-height: 1; white-space: nowrap;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.mr-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mr-btn:not(:disabled):hover { transform: translateY(-1px); }
+.mr-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.28); }
+.mr-btn--match {
+  background: linear-gradient(135deg, #10b981, #059669); color: #fff;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32);
+}
+.mr-btn--match:not(:disabled):hover { box-shadow: 0 10px 22px rgba(16, 185, 129, 0.42); }
+.mr-btn--equal { background: rgba(63, 169, 245, 0.10); color: #1668a3; }
+.mr-btn--equal:not(:disabled):hover { background: rgba(63, 169, 245, 0.17); }
+.mr-btn--reject { background: rgba(239, 68, 68, 0.10); color: #b91c1c; }
+.mr-btn--reject:not(:disabled):hover { background: rgba(239, 68, 68, 0.17); }
+[data-bs-theme='dark'] {
+  .mr-btn--equal { color: #9fd6ff; }
+  .mr-btn--reject { color: #fca5a5; }
+}
+
+.band-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+// ── Search result card ───────────────────────────────────────────
+.result-card {
+  display: flex; gap: 0.9rem; height: 100%; padding: 1rem;
+  border-radius: 0.9rem; border: 1px solid var(--border-soft); background: var(--card-bg);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.result-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: transparent; }
+
+.border-top-soft { border-top: 1px solid var(--border-soft); }
+.border-bottom-soft { border-bottom: 1px solid var(--border-soft); }
+
+// ── Skeleton ─────────────────────────────────────────────────────
+.skeleton {
+  background: linear-gradient(90deg, rgba(148,163,184,0.12) 25%, rgba(148,163,184,0.22) 37%, rgba(148,163,184,0.12) 63%);
+  background-size: 400% 100%; animation: skeleton 1.4s ease infinite; border-radius: 0.6rem;
+}
+@keyframes skeleton { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+// ── Pagination ───────────────────────────────────────────────────
+// Own markup rather than Bootstrap's .pagination, so sizing and states are
+// consistent with .btn / .icon-btn elsewhere instead of fighting Bootstrap.
+.pagination-clean {
+  display: flex; align-items: center; gap: 0.25rem;
+  list-style: none; margin: 0; padding: 0;
+}
+.pagination-clean .page-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+  min-width: 34px; height: 34px; padding: 0 0.6rem;
+  border-radius: 0.6rem; border: 1px solid var(--border-soft);
+  background: var(--card-bg); color: var(--text-secondary);
+  font-size: 0.84rem; font-weight: 600; line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.pagination-clean .page-btn:hover:not(:disabled):not(.is-active) {
+  background: var(--hover-soft); color: var(--primary); border-color: var(--primary);
+}
+.pagination-clean .page-btn:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.18);
+}
+.pagination-clean .page-btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+.pagination-clean .page-btn.is-active {
+  background: var(--grad-primary); border-color: transparent; color: #fff;
+  box-shadow: 0 4px 12px rgba(63, 169, 245, 0.28);
+}
+.pagination-clean .page-ellipsis {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 34px; color: var(--text-secondary); user-select: none;
+}
+
+// ── Breadcrumb ───────────────────────────────────────────────────
+.breadcrumb { font-size: 0.82rem; margin-bottom: 0; }
+.breadcrumb-item a { color: var(--text-secondary); }
+.breadcrumb-item.active { color: var(--text-primary); font-weight: 600; }
+
+// ── Modal ────────────────────────────────────────────────────────
+.modal-content { border-radius: $border-radius-xl; border: 1px solid var(--border-soft); box-shadow: var(--shadow-lg); background: var(--card-bg); }
+.modal-header, .modal-footer { border-color: var(--border-soft); }
+// Breathing room. Bootstrap's default padding leaves a dense form crowding
+// its own edges, and the footer sitting flush against the last field.
+.modal-header { padding: 1.25rem 1.5rem; }
+.modal-body { padding: 1.5rem; }
+.modal-footer { padding: 1rem 1.5rem; gap: 0.5rem; }
+.modal-footer > * { margin: 0; }
+.modal-title { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; letter-spacing: -0.02em; font-size: 1.15rem; }
+// The tinted band under the actions separates them from the form above.
+.modal-footer { background: var(--app-bg); border-radius: 0 0 $border-radius-xl $border-radius-xl; }
+.modal-backdrop.show { opacity: 0.45; backdrop-filter: blur(3px); }
+
+// ── Chat ─────────────────────────────────────────────────────────
+.chat-bubble { max-width: 78%; padding: 0.8rem 1.05rem; border-radius: 1.1rem; margin-bottom: 0.85rem; line-height: 1.5; font-size: 0.92rem; box-shadow: var(--shadow-xs); }
+.chat-bubble.user { background: var(--grad-primary); color: #fff; margin-left: auto; border-bottom-right-radius: 0.4rem; }
+.chat-bubble.ai { background: var(--app-bg); border: 1px solid var(--border-soft); border-bottom-left-radius: 0.4rem; }
+.chat-bubble code { background: rgba(15,23,42,0.08); padding: 0.1rem 0.35rem; border-radius: 0.4rem; font-size: 0.85em; }
+
+// ── Login ────────────────────────────────────────────────────────
+.login-shell { min-height: 100vh; display: grid; place-items: center; position: relative; overflow: hidden; background: #06090f; }
+
+// ── Auth pages (sign in / forgot password / 2FA) ─────────────────
+// Public and pre-login, so these never follow the app's theme toggle: black
+// canvas, one sky-blue accent, and the marketing site's blueprint grid.
+.auth-page {
+  min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
+  position: relative; overflow: hidden; background: #06090f;
+}
+// Blueprint grid, faded out before the edges so the card sits in clear air.
+.auth-page::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(160, 190, 225, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(160, 190, 225, 0.05) 1px, transparent 1px),
+    linear-gradient(to right, rgba(63, 169, 245, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(63, 169, 245, 0.09) 1px, transparent 1px);
+  background-size: 34px 34px, 34px 34px, 170px 170px, 170px 170px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 78%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 78%);
+}
+// One soft bloom behind the card instead of drifting blobs. The other two
+// aurora elements still render on these pages; they are simply not painted.
+.auth-aurora { position: absolute; pointer-events: none; border-radius: 50%; }
+.auth-aurora.a1 {
+  width: 620px; height: 420px; background: rgba(63, 169, 245, 0.13);
+  filter: blur(90px); top: -120px; left: 50%; transform: translateX(-50%);
+}
+.auth-aurora.a2, .auth-aurora.a3 { display: none; }
+
+.auth-stack { position: relative; z-index: 2; width: min(420px, 94vw); }
+
+// Brand lockup above the card, so the card carries nothing but the task.
+.auth-brand { display: flex; align-items: center; justify-content: center; gap: 0.65rem; }
+.auth-logo {
+  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
+  border-radius: 0.5rem; background: linear-gradient(135deg, #3fa9f5, #2b8fd8);
+  color: #04121f; font-weight: 800; font-size: 0.8rem; letter-spacing: -0.02em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%);
+}
+.auth-wordmark {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 1.5rem;
+  letter-spacing: -0.03em; color: #fff;
+}
+.auth-tagline {
+  text-align: center; margin: 0.7rem 0 1.75rem;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #64748b;
+}
+
+// Flat panel — hairline border, no glass, no lift. One accent rule across
+// the top edge, the same mark the signup sections carry.
+.auth-card {
+  position: relative; overflow: hidden;
+  background: #0f141c; border: 1px solid #1e2733; border-radius: 14px;
+  padding: 1.75rem; color: #e8eef6;
+}
+.auth-card::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, #3fa9f5, transparent 62%);
+}
+
+.auth-head { margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid #1e2733; }
+.auth-title {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.6rem; font-weight: 800;
+  letter-spacing: -0.032em; line-height: 1.1; color: #fff; margin: 0;
+}
+.auth-sub { color: #93a3b8; font-size: 0.9rem; line-height: 1.5; margin: 0.45rem 0 0; }
+
+.auth-label {
+  display: block; margin-bottom: 0.45rem;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  color: #7d8ea3;
+}
+.auth-label-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.45rem; }
+.auth-forgot { font-size: 0.8rem; font-weight: 600; color: #5cb8ff; text-decoration: none; }
+.auth-forgot:hover { color: #9fd6ff; text-decoration: underline; }
+
+.auth-field { position: relative; }
+.auth-eye {
+  position: absolute; top: 50%; right: 0.6rem; transform: translateY(-50%);
+  display: grid; place-items: center; width: 32px; height: 32px;
+  border: none; background: transparent; color: #7d8ea3; border-radius: 0.4rem;
+  cursor: pointer; transition: color 0.15s, background 0.15s;
+}
+.auth-eye:hover { color: #e8eef6; background: rgba(255, 255, 255, 0.06); }
+
+.auth-card .form-control {
+  min-height: 48px; border-radius: 0.6rem;
+  background: #161d28; border-color: #26313f; color: #eaf1f8;
+}
+.auth-card .form-control::placeholder { color: #66788d; }
+.auth-card .form-control:focus {
+  background: #18202c; border-color: #3fa9f5; color: #fff;
+  box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.2);
+}
+// Keyed to the wrapper, not [type=password] — the eye toggle switches the
+// input to type=text, which would drop the reserved space mid-interaction.
+.auth-field .form-control { padding-right: 2.9rem; }
+.auth-group { margin-bottom: 1.1rem; }
+// Chrome paints autofilled fields white and ignores background-color; the
+// inset shadow is the only way to repaint them, and the text needs its own
+// property because `color` is overridden too.
+.auth-card .form-control:-webkit-autofill,
+.auth-card .form-control:-webkit-autofill:hover,
+.auth-card .form-control:-webkit-autofill:focus {
+  -webkit-text-fill-color: #eaf1f8;
+  -webkit-box-shadow: 0 0 0 1000px #161d28 inset;
+  caret-color: #eaf1f8;
+  transition: background-color 9999s ease-in-out 0s;
+}
+.auth-err { color: #fca5a5; font-size: 0.8rem; margin: 0.4rem 0 0; }
+
+.auth-alert {
+  display: flex; align-items: flex-start; gap: 0.55rem;
+  background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);
+  border-left: 2px solid #ef4444; border-radius: 0.5rem;
+  padding: 0.7rem 0.85rem; margin-bottom: 1.1rem; font-size: 0.85rem; color: #fca5a5;
+}
+
+.auth-btn {
+  background: #3fa9f5; border: none; color: #04121f;
+  font-weight: 700; padding: 0.8rem; border-radius: 0.6rem; width: 100%;
+  transition: background 0.16s;
+}
+.auth-btn:hover:not(:disabled) { background: #5cb8ff; color: #04121f; }
+.auth-btn:disabled { opacity: 0.6; }
+.auth-foot { text-align: center; margin: 1.5rem 0 0; color: #4f5d70; font-size: 0.75rem; }
+
+// Still used by the password-reset and 2FA screens.
+.auth-card .form-label { color: #7d8ea3; }
+.auth-card .input-group-text { background: #161d28; border-color: #26313f; color: #7d8ea3; }
+.auth-card .form-check-label { color: #93a3b8; }
+.auth-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #5cb8ff; background: rgba(63, 169, 245, 0.08); border: 1px solid rgba(63, 169, 245, 0.3);
+  padding: 0.28rem 0.7rem; border-radius: 0.35rem;
+}
+.auth-pw-toggle { background: #161d28; border-color: #26313f; color: #7d8ea3; cursor: pointer; }
+
+// ── Onboarding experience ────────────────────────────────────────
+// Signup runs before login, where the theme toggle isn't reachable, so it
+// always wears the marketing palette instead of following whichever mode
+// the app was last left in. Redefining the tokens on the shell cascades to
+// every card, input, badge and button inside it — no per-component edits.
+.ob-shell {
+  // Cards sit noticeably above the canvas here. At #0f141c on #06090f the
+  // difference was a few percent of lightness, so a page of forms read as one
+  // flat black field with no edges — the panels have to be findable.
+  --app-bg: #070b12;
+  --card-bg: #131c27;
+  --text-primary: #eaf1f8;
+  --text-secondary: #9db0c4;
+  --border-soft: #29343f;
+  --hover-soft: #1a2431;
+  --primary: #3fa9f5;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  // Bootstrap reads its OWN variables, not ours. Without these it keeps the
+  // light-mode values whenever the app is set to light, and any component
+  // that colours itself from --bs-body-color renders dark-on-dark here.
+  --bs-body-color: #eaf1f8;
+  --bs-body-color-rgb: 234, 241, 248;
+  --bs-emphasis-color: #ffffff;
+  --bs-secondary-color: rgba(232, 238, 246, 0.65);
+  --bs-body-bg: #070b12;
+  --bs-tertiary-bg: #1a2431;
+  --bs-border-color: #29343f;
+
+  min-height: 100vh; display: flex; color: var(--text-primary);
+  // The landing hero's blueprint grid, held still behind the wizard.
+  background-color: var(--app-bg);
+  background-image:
+    linear-gradient(to right, rgba(160, 190, 225, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(160, 190, 225, 0.05) 1px, transparent 1px),
+    linear-gradient(to right, rgba(63, 169, 245, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(63, 169, 245, 0.09) 1px, transparent 1px);
+  background-size: 34px 34px, 34px 34px, 170px 170px, 170px 170px;
+}
+// The step bar floats over the grid, so it needs a ground of its own.
+.ob-shell .ob-topbar {
+  background: rgba(6, 9, 15, 0.9);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border-bottom-color: rgba(160, 190, 225, 0.09);
+}
+// Bootstrap draws the mobile progress track from its own token.
+.ob-shell .progress { background: var(--border-soft); }
+
+// Plan and option cards take the landing's flat, ruled treatment: squared
+// corners, hairline borders, an accent rule across the chosen one, and no
+// halo. Bootstrap's tonal badges need restating because their dark-mode
+// rules are keyed to [data-bs-theme], which this shell does not depend on.
+.ob-shell .plan-card,
+.ob-shell .opt-card { border-width: 1px; border-radius: 10px; }
+.ob-shell .plan-card:hover,
+.ob-shell .opt-card:hover { box-shadow: none; border-color: var(--primary); }
+.ob-shell .plan-card.selected,
+.ob-shell .opt-card.selected { box-shadow: none; border-color: var(--primary); background: #17293b; }
+.ob-shell .plan-card.selected::after {
+  content: ''; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px;
+  background: var(--primary); border-radius: 10px 10px 0 0;
+}
+.ob-shell .plan-badge {
+  background: var(--primary); color: #04121f; border-radius: 0.3rem; letter-spacing: 0.02em;
+}
+.ob-shell .text-bg-primary { background: rgba(63, 169, 245, 0.2) !important; color: #9fd6ff !important; }
+.ob-shell .text-bg-success { background: rgba(62, 212, 143, 0.18) !important; color: #6ee7b7 !important; }
+// #16a34a is a light-background green; on black it drops under 3:1.
+.ob-shell .text-success, .ob-shell .pw-req.ok, .ob-shell .success-ring { color: #6ee7b7 !important; }
+.ob-shell .logo-drop, .ob-shell .pw-meter { background: rgba(255, 255, 255, 0.03); }
+
+// ── Organization step: form + running plan summary ───────────────
+.ob-form-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.5rem; align-items: start; }
+.ob-aside { position: sticky; top: 5.5rem; }
+@media (max-width: 1199.98px) {
+  .ob-form-grid { grid-template-columns: 1fr; }
+  .ob-aside { position: static; order: -1; }
+}
+
+// Section cards: a hairline card lifted by one accent rule across the top.
+.ob-shell .ob-section {
+  position: relative; border-radius: 12px; overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(63, 169, 245, 0.045), transparent 120px),
+    var(--card-bg);
+}
+.ob-shell .ob-section::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--primary), transparent 62%);
+}
+.ob-shell .ob-section .card-body { padding: 1.65rem 1.75rem 1.75rem; }
+
+.ob-section-head {
+  display: flex; align-items: flex-start; gap: 0.9rem;
+  padding-bottom: 1.1rem; margin-bottom: 1.4rem; border-bottom: 1px solid var(--border-soft);
+}
+.ob-num {
+  flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem; font-weight: 700; line-height: 1; color: var(--primary);
+  border: 1px solid rgba(63, 169, 245, 0.38); border-radius: 0.35rem;
+  background: rgba(63, 169, 245, 0.11); padding: 0.45rem 0.55rem;
+}
+.ob-eyebrow {
+  display: inline-flex; align-items: center; gap: 0.7rem;
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--primary);
+}
+.ob-eyebrow::before { content: ''; width: 1.4rem; height: 2px; background: var(--primary); }
+
+// Fields read as instrument inputs: micro-labels, taller wells, accent focus.
+.ob-shell .form-label {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-secondary); margin-bottom: 0.4rem;
+}
+// Inputs read as wells cut into the card, so they need to sit BELOW it now
+// that the card itself is lighter — a near-transparent fill would disappear.
+.ob-shell .form-control, .ob-shell .form-select {
+  min-height: 46px; border-radius: 0.55rem;
+  background: #0d151f; border-color: var(--border-soft);
+}
+.ob-shell .form-control:hover, .ob-shell .form-select:hover { border-color: rgba(63, 169, 245, 0.4); }
+.ob-shell .form-control::placeholder { color: var(--text-secondary); opacity: 0.75; }
+// The native select popup is drawn by the OS, which needs explicit colours.
+.ob-shell .form-select option { background: var(--card-bg); color: var(--text-primary); }
+
+// Plan recap — the one saturated surface on the step, so the eye lands on it.
+.ob-summary {
+  position: relative; overflow: hidden;
+  padding: 1.5rem 1.5rem 1.4rem; border-radius: 12px;
+  border: 1px solid rgba(63, 169, 245, 0.3);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(63, 169, 245, 0.16), transparent 62%),
+    #17293b;
+}
+.ob-summary__name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.ob-summary__cycle {
+  flex-shrink: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--primary); border: 1px solid rgba(63, 169, 245, 0.38); border-radius: 0.3rem; padding: 0.2rem 0.5rem;
+}
+.ob-summary__price {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2.3rem; font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1; color: #fff; margin-top: 0.85rem;
+}
+.ob-summary__price span { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-left: 0.2rem; }
+.ob-summary__tagline { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; margin: 0.55rem 0 0; }
+.ob-summary__rule { height: 1px; background: var(--border-soft); margin: 1.15rem 0; }
+.ob-summary__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.ob-summary__list li { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.87rem; color: var(--text-primary); }
+.ob-summary__list svg { flex-shrink: 0; margin-top: 2px; color: #6ee7b7; }
+.ob-summary__note { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); }
+.ob-summary__note svg { flex-shrink: 0; margin-top: 2px; color: var(--primary); }
+
+// Left vertical timeline.
+// Lifted clear of the canvas: it previously used the same near-black as
+// --app-bg, so the rail and the content area were one undivided field with
+// nothing to show where the navigation ended.
+.ob-rail {
+  width: 280px; flex-shrink: 0; padding: 2rem 1.35rem;
+  background: linear-gradient(180deg, #101922, #0b131b);
+  border-right: 1px solid rgba(160, 190, 225, 0.12);
+  color: #dbe4ee; position: relative; overflow: hidden;
+}
+.ob-rail::after {
+  content: ''; position: absolute; width: 320px; height: 320px; border-radius: 50%;
+  background: #3fa9f5; filter: blur(90px); opacity: 0.25; bottom: -120px; left: -100px;
+}
+.ob-step { display: flex; gap: 0.85rem; position: relative; padding-bottom: 1.35rem; }
+.ob-step:last-child { padding-bottom: 0; }
+.ob-step::before {
+  content: ''; position: absolute; left: 13px; top: 30px; bottom: -4px; width: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ob-step:last-child::before { display: none; }
+.ob-step.done::before { background: #22c55e; }
+.ob-dot {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; z-index: 1;
+  display: grid; place-items: center; font-size: 0.74rem; font-weight: 700;
+  background: rgba(255, 255, 255, 0.07); color: #a9bacd;
+  border: 1px solid rgba(160, 190, 225, 0.22); transition: all 0.3s;
+}
+.ob-step.done .ob-dot { background: #22c55e; color: #04220f; border-color: #22c55e; }
+// Dark ink on the accent — white lands near 2.6:1 on sky blue.
+.ob-step.current .ob-dot {
+  background: var(--grad-primary); color: #04121f; border-color: transparent;
+  box-shadow: 0 0 0 5px rgba(63, 169, 245, 0.25);
+  animation: ob-glow 2s ease-in-out infinite;
+}
+@keyframes ob-glow {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(63, 169, 245, 0.22); }
+  50% { box-shadow: 0 0 0 9px rgba(63, 169, 245, 0.08); }
+}
+// #64748b on this ground was roughly 3:1 — under the minimum for body text,
+// and worse on the 0.72rem description. Upcoming steps are meant to look
+// secondary, not unreadable.
+.ob-step-label { font-size: 0.88rem; font-weight: 600; color: #a9bacd; line-height: 1.3; }
+.ob-step.done .ob-step-label { color: #dbe4ee; }
+.ob-step.current .ob-step-label { color: #fff; }
+.ob-step-desc { font-size: 0.74rem; color: #8fa2b6; margin-top: 2px; }
+.ob-step.current .ob-step-desc { color: #a9bacd; }
+
+// Horizontal step bar — for short wizards that don't warrant the sidebar rail.
+.ob-topbar {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-soft);
+  position: sticky; top: 0; z-index: 1020;
+}
+.ob-topbar-inner {
+  display: flex; align-items: center; gap: 1.75rem;
+  padding: 1.05rem 1.75rem; max-width: 1240px; margin-inline: auto;
+}
+
+// Brand lockup — the mark carries the clipped corner used on the marketing
+// site, and the strapline is set as a micro-label rather than small body text.
+.ob-brand { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+.ob-brand-mark {
+  width: 36px; height: 36px; display: grid; place-items: center; flex-shrink: 0;
+  border-radius: 0.5rem; background: var(--grad-primary); color: #04121f;
+  font-weight: 800; font-size: 0.82rem; letter-spacing: -0.02em;
+  clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%);
+}
+.ob-brand-title {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 1rem;
+  letter-spacing: -0.025em; line-height: 1.15; color: var(--text-primary);
+}
+.ob-brand-sub {
+  font-size: 0.63rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--text-secondary); margin-top: 3px;
+}
+
+// The track is separated from the lockup by a hairline, so the header reads
+// as two zones: who this is, and how far along you are.
+.ob-topbar-steps {
+  display: flex; align-items: center; flex: 1; justify-content: center; gap: 0;
+  border-left: 1px solid var(--border-soft); padding-left: 1.75rem; align-self: stretch;
+}
+.ob-hstep { display: flex; align-items: center; gap: 0.6rem; }
+.ob-hdot {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem; font-weight: 700;
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-soft); transition: all 0.25s;
+}
+// One accent runs the whole track: filled behind you, ringed where you are,
+// hairline ahead. No second colour competing for attention.
+.ob-hstep.done .ob-hdot { background: var(--primary); border-color: var(--primary); color: #04121f; }
+.ob-hstep.current .ob-hdot {
+  background: var(--primary); border-color: transparent; color: #04121f;
+  box-shadow: 0 0 0 4px rgba(63, 169, 245, 0.16), 0 4px 14px rgba(63, 169, 245, 0.35);
+}
+.ob-hlabel {
+  font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);
+  white-space: nowrap; letter-spacing: -0.005em; transition: color 0.2s;
+}
+.ob-hstep.done .ob-hlabel { color: var(--text-primary); }
+.ob-hstep.current .ob-hlabel { color: var(--text-primary); font-weight: 700; }
+.ob-hline {
+  width: 52px; height: 2px; background: var(--border-soft);
+  margin: 0 0.85rem; border-radius: 2px; transition: background 0.3s;
+}
+.ob-hstep.done .ob-hline { background: var(--primary); }
+
+.ob-exit {
+  flex-shrink: 0; border: 1px solid var(--border-soft); background: transparent;
+  color: var(--text-primary); border-radius: 0.5rem; padding: 0.45rem 1.05rem;
+  font-size: 0.85rem; font-weight: 700;
+  transition: border-color 0.16s, background 0.16s, color 0.16s;
+}
+.ob-exit:hover { border-color: var(--primary); color: var(--primary); background: rgba(63, 169, 245, 0.07); }
+.ob-exit:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.22); }
+
+@media (max-width: 991.98px) {
+  .ob-topbar-inner { padding: 0.8rem 1rem; gap: 0.85rem; }
+  .ob-topbar-steps { display: none; }
+}
+
+// Inline variant — sits inside the app shell as a card (no sticky, no brand).
+.ob-stepbar-inline {
+  background: var(--card-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: $border-radius-xl;
+  box-shadow: var(--shadow-sm);
+  padding: 0.9rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.ob-stepbar-inline .ob-topbar-steps { justify-content: center; }
+@media (max-width: 991.98px) { .ob-stepbar-inline { padding: 0.75rem 1rem; } }
+
+.ob-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ob-body { flex: 1; padding: 1.75rem; display: grid; place-items: start stretch; }
+// Short steps (welcome / OTP / password): centred vertically.
+// Centre vertically only — keep the track stretched so .ob-content keeps its
+// full width. Horizontal centring is .ob-narrow's job (margin-inline: auto);
+// letting justify-items shrink-wrap the track instead fights width:100% and
+// leaves narrow steps hugging the left edge.
+.ob-body.ob-center { place-items: center stretch; align-content: center; }
+// Wide by default so forms use the space; centred only past the max width.
+.ob-content { width: 100%; max-width: 1080px; margin-inline: auto; }
+.ob-narrow { max-width: 620px; margin-inline: auto; }
+@media (min-width: 1600px) { .ob-content { max-width: 1200px; } }
+
+// Two-column layout for short steps — a soft info panel beside the action card
+// fills the width, so the card isn't marooned in a wide empty band.
+.ob-split {
+  width: 100%; max-width: 940px; margin-inline: auto;
+  display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 1.5rem; align-items: stretch;
+}
+.ob-split-aside {
+  border-radius: 1.25rem; padding: 2rem; color: #fff; position: relative; overflow: hidden;
+  background: linear-gradient(150deg, #0a3d5f 0%, #3fa9f5 55%, #2b8fd8 100%);
+  display: flex; flex-direction: column;
+}
+.ob-split-aside::after {
+  content: ''; position: absolute; width: 240px; height: 240px; border-radius: 50%;
+  background: #60a5fa; filter: blur(70px); opacity: 0.35; bottom: -90px; right: -70px;
+}
+.ob-split-card { display: flex; align-items: center; }
+.ob-split-card > * { width: 100%; }
+@media (max-width: 767.98px) {
+  .ob-split { grid-template-columns: 1fr; max-width: 480px; }
+  .ob-split-aside { display: none; }
+}
+
+// Mobile: rail becomes a top progress bar
+@media (max-width: 991.98px) {
+  .ob-shell { flex-direction: column; }
+  .ob-rail { width: 100%; padding: 1rem 1.25rem; }
+  .ob-rail-steps { display: none; }
+  .ob-body { padding: 1.25rem; }
+}
+
+// Pricing cards
+.plan-card {
+  border: 1.5px solid var(--border-soft); border-radius: 1rem; background: var(--card-bg);
+  padding: 1.35rem; height: 100%; cursor: pointer; position: relative;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.plan-card:hover { border-color: rgba(63, 169, 245, 0.5); box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+.plan-card.selected { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(63, 169, 245, 0.14); }
+.plan-badge {
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  background: var(--grad-primary); color: #fff; font-size: 0.66rem; font-weight: 700;
+  padding: 0.22rem 0.7rem; border-radius: 999px; letter-spacing: 0.04em; white-space: nowrap;
+}
+.plan-price { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-size: 1.9rem; line-height: 1; }
+
+// Selectable option card (billing cycle / payment method)
+// `color` is not optional here. This is a <button>, and Bootstrap's reboot
+// does not give buttons `color: inherit` — without it the UA default
+// (buttontext, near-black) applies, so any child WITHOUT its own colour class
+// renders black on a dark card. That is why the title and price vanished
+// while .text-muted and .text-success beside them stayed readable.
+.opt-card {
+  border: 1.5px solid var(--border-soft); border-radius: 0.9rem; background: var(--card-bg);
+  color: var(--text-primary);
+  padding: 1rem; cursor: pointer; width: 100%; text-align: left; position: relative;
+  transition: all 0.18s;
+}
+.opt-card:hover { border-color: rgba(63, 169, 245, 0.5); background: var(--hover-soft); }
+.opt-card.selected { border-color: var(--primary); background: var(--hover-soft); box-shadow: 0 0 0 3px rgba(63, 169, 245, 0.12); }
+
+// Password strength meter
+.pw-meter { height: 6px; border-radius: 999px; background: var(--border-soft); overflow: hidden; }
+.pw-meter span { display: block; height: 100%; border-radius: 999px; transition: width 0.3s, background 0.3s; }
+.pw-req { font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-secondary); }
+.pw-req.ok { color: #16a34a; }
+
+// Logo upload dropzone
+.logo-drop {
+  border: 2px dashed var(--border-soft); border-radius: 0.9rem; padding: 1.1rem;
+  display: grid; place-items: center; cursor: pointer; transition: all 0.18s; text-align: center;
+}
+.logo-drop:hover { border-color: var(--primary); background: var(--hover-soft); }
+
+// Celebration
+.confetti-piece { position: absolute; width: 9px; height: 14px; border-radius: 2px; will-change: transform; }
+.success-ring {
+  width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(34, 197, 94, 0.12); color: #16a34a; margin: 0 auto;
+}
+
+// OTP boxes
+.otp-box {
+  width: 48px; height: 56px; text-align: center; font-size: 1.4rem; font-weight: 700;
+  border-radius: 0.8rem; color: #fff; caret-color: #60a5fa;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);
+  transition: border 0.15s, box-shadow 0.15s, background 0.15s; outline: none;
+}
+.otp-box:focus { border-color: #60a5fa; background: rgba(255,255,255,0.12); box-shadow: 0 0 0 3px rgba(96,165,250,0.28); }
+// Light variant — for OTP boxes shown on light cards (Settings, onboarding).
+// Without this the boxes inherit the dark auth styling (white text on white) and
+// look invisible until focused.
+.otp-light .otp-box {
+  background: var(--card-bg); border-color: var(--border-soft); color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+.otp-light .otp-box::placeholder { color: var(--text-secondary); }
+.otp-light .otp-box:focus { background: var(--card-bg); border-color: var(--primary); box-shadow: 0 0 0 3px rgba(63,169,245,0.18); }
+.otp-light .otp-box:disabled { background: var(--app-bg); opacity: 0.7; }
+// Left-align the row (beats Bootstrap's .justify-content-center on the wrapper).
+.otp-start { justify-content: flex-start !important; }
+@media (max-width: 400px) { .otp-box { width: 42px; height: 50px; font-size: 1.2rem; } }
+
+// 2FA settings card helpers
+.twofa-secret {
+  font-family: monospace; letter-spacing: 2px; background: var(--app-bg);
+  border: 1px dashed var(--border-soft); border-radius: 0.6rem; padding: 0.5rem 0.75rem;
+}
+.backup-code { font-family: monospace; background: var(--app-bg); border: 1px solid var(--border-soft); border-radius: 0.5rem; padding: 0.35rem 0.5rem; text-align: center; }
+.login-split { display: grid; grid-template-columns: 1.1fr 1fr; min-height: 100vh; width: 100%; }
+.login-aside {
+  position: relative; overflow: hidden; color: #fff; padding: 3.5rem;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: linear-gradient(150deg, #0a3d5f 0%, #3fa9f5 45%, #2b8fd8 100%);
+}
+.login-panel { display: grid; place-items: center; padding: 2rem; background: var(--app-bg); }
+.floating-shape { position: absolute; border-radius: 50%; filter: blur(2px); opacity: 0.28; animation: float 9s ease-in-out infinite; }
+.floating-shape.s1 { width: 260px; height: 260px; background: #60a5fa; top: -60px; right: -40px; }
+.floating-shape.s2 { width: 180px; height: 180px; background: #a78bfa; bottom: 40px; left: -50px; animation-delay: 1.5s; }
+.floating-shape.s3 { width: 120px; height: 120px; background: #38bdf8; top: 45%; right: 20%; animation-delay: 3s; }
+@keyframes float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-22px) } }
+
+@media (max-width: 991.98px) { .login-split { grid-template-columns: 1fr; } .login-aside { display: none; } }
+
+// ── Misc ─────────────────────────────────────────────────────────
+.cursor-pointer { cursor: pointer; }
+.section-title { font-family: $headings-font-family; font-weight: 700; }
+.hover-lift { transition: transform 0.18s, box-shadow 0.18s; }
+.hover-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+// ── Responsive sidebar (mobile drawer) ───────────────────────────
+@media (max-width: 991.98px) {
+  .app-sidebar { transform: translateX(-100%); width: var(--sidebar-width); }
+  .app-sidebar.open { transform: translateX(0); }
+  .app-main, .app-main.collapsed { margin-left: 0; }
+  .app-content { padding: 1.1rem; }
+}
+
+// Settings side-nav stays in view while long tab content scrolls.
+@media (min-width: 992px) {
+  .settings-nav-card { position: sticky; top: 1rem; }
+}

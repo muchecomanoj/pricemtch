@@ -1,0 +1,34 @@
+// ── Design tokens ───────────────────────────────────────────────
+// Override Bootstrap's SCSS variables BEFORE importing Bootstrap.
+
+// Brand palette (per design spec)
+$primary: #2563eb;
+$success: #10b981;
+$warning: #f59e0b;
+$danger:  #ef4444;
+$info:    #0ea5e9;
+
+$body-bg:    #f8fafc;
+$body-color: #0f172a;
+
+// Neutral scale
+$gray-500: #64748b;
+$border-color: #e2e8f0;
+
+// Rounder, softer corners
+$border-radius:    0.75rem;   // 12px
+$border-radius-sm: 0.625rem;
+$border-radius-lg: 1rem;      // 16px
+$border-radius-xl: 1.125rem;  // 18px
+
+// Typography
+$font-family-sans-serif: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$headings-font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+$headings-font-weight: 700;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+
+// Layout metrics (also exposed as CSS vars in main.scss)
+$sidebar-width: 264px;
+$sidebar-collapsed: 84px;
+$navbar-height: 68px;

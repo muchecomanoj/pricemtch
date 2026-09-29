@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Amazon Scraper API — Swagger UI</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+    />
+    <style>
+      body {
+        margin: 0;
+        background: #fafafa;
+      }
+      .topbar {
+        display: none;
+      }
+      .swagger-ui .info .title small.version-stamp {
+        background: #ff9900;
+      }
+      .slow-notice {
+        max-width: 1460px;
+        margin: 16px auto 0;
+        padding: 12px 16px;
+        box-sizing: border-box;
+        border: 1px solid #f0c36d;
+        background: #fdf6e3;
+        border-radius: 8px;
+        font:
+          14px "Segoe UI",
+          system-ui,
+          sans-serif;
+        color: #6b5200;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="slow-notice">
+      <strong>Heads up:</strong> every request drives a real headless Chrome.
+      <em>Try it out</em> takes roughly 5–15s when the ASIN is found on the first
+      marketplace, and up to ~37s when it is on none of them. Don't reload while
+      a call is in flight.
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.json",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        defaultModelsExpandDepth: 0,
+        displayRequestDuration: true,
+        tryItOutEnabled: true,
+        presets: [SwaggerUIBundle.presets.apis],
+      });
+    </script>
+  </body>
+</html>

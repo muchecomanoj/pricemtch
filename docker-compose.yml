@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:17
+    container_name: price-intel-db
+    environment:
+      POSTGRES_DB: price_intel
+      POSTGRES_USER: price_admin
+      POSTGRES_PASSWORD: price_admin_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U price_admin -d price_intel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: price-intel-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/price_intel
+      SPRING_DATASOURCE_USERNAME: price_admin
+      SPRING_DATASOURCE_PASSWORD: price_admin_pass
+      JWT_SECRET: change-me-in-production-price-intelligence-super-secret-key-0123456789
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

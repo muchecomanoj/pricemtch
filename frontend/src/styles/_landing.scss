@@ -1,0 +1,530 @@
+// ═════════════════════════════════════════════════════════════════
+// MARKETING LANDING PAGE (.lp) — black canvas, sky-blue signal
+//
+// GRAPHIC SYSTEM — "the price grid".
+// The page is drawn like an instrument panel for market data:
+//   · a fine blueprint grid under the hero and the closing CTA
+//   · a price histogram rising off the bottom of the hero
+//   · rules and tick marks instead of glows — every accent is a
+//     straight line, never a circle or a halo
+//   · squared corners on anything that carries a label
+// Nothing pulses, sweeps or orbits; the page holds still and lets the
+// numbers move.
+//
+// Colour: one sky blue carries every action, green every positive
+// number. Sky blue is light, so anything sitting ON it takes dark ink.
+//
+// Class names match Landing.jsx exactly; this file is pure presentation
+// and is scoped to `.lp`, which nothing else in the app uses.
+// ═════════════════════════════════════════════════════════════════
+.lp {
+  // Surfaces — black, cooled a few degrees toward the accent. Each step
+  // up is lighter, never a shadow.
+  --lp-bg: #06090f;
+  --lp-bg-2: #0a0e15;
+  --lp-surface: #0f141c;
+  --lp-surface-2: #161d28;
+  --lp-raise: #141b25;
+
+  // Hairlines
+  --lp-line: rgba(160, 185, 215, 0.13);
+  --lp-line-soft: rgba(160, 185, 215, 0.07);
+  --lp-line-bright: rgba(63, 169, 245, 0.38);
+
+  // Type
+  --lp-ink: #e8eef6;
+  --lp-ink-2: #93a3b8;
+  --lp-ink-3: #64748b;
+
+  // Accent
+  --lp-ac: #3fa9f5;
+  --lp-ac-hi: #5cb8ff;
+  --lp-ac-wash: rgba(63, 169, 245, 0.13);
+  --lp-on-ac: #04121f;
+
+  // Positive — reserved for numbers that went the right way.
+  --lp-pos: #3ed48f;
+  --lp-pos-wash: rgba(62, 212, 143, 0.12);
+  --lp-amber: #edb14e;
+
+  --lp-grad: linear-gradient(110deg, #3fa9f5 0%, #62bcff 52%, #9fd6ff 100%);
+  --lp-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  min-height: 100vh;
+  color: var(--lp-ink);
+  background: var(--lp-bg);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+}
+.lp h1, .lp h2, .lp h3 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; color: var(--lp-ink); }
+.lp-container { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+// ── Buttons ─────────────────────────────────────────────────────
+// Squared-off, like keys on an instrument. Solid blue = the one action.
+.lp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  font-weight: 700; font-size: 0.94rem; border-radius: 0.4rem; padding: 0.72rem 1.35rem;
+  border: 1px solid transparent; cursor: pointer;
+  transition: background .16s, border-color .16s, color .16s;
+  white-space: nowrap; text-decoration: none; letter-spacing: -0.005em;
+}
+.lp-btn svg { flex-shrink: 0; }
+.lp-btn-lg { padding: 0.92rem 1.8rem; font-size: 1rem; }
+
+.lp-btn-primary { background: var(--lp-ac); color: var(--lp-on-ac); }
+.lp-btn-primary:hover { background: var(--lp-ac-hi); color: var(--lp-on-ac); }
+
+.lp-btn-outline { background: transparent; color: var(--lp-ink); border-color: var(--lp-line); }
+.lp-btn-outline:hover { color: var(--lp-ink); border-color: var(--lp-ac); background: rgba(255,255,255,.03); }
+
+.lp-btn-ghost { background: transparent; color: var(--lp-ink-2); }
+.lp-btn-ghost:hover { color: var(--lp-ink); }
+
+// Secondary CTA inside the split sections — elevated, not blue, so the
+// blue buttons keep their meaning.
+.lp-btn-dark { background: var(--lp-surface-2); color: var(--lp-ink); border-color: var(--lp-line); }
+.lp-btn-dark:hover { color: var(--lp-ac-hi); border-color: var(--lp-ac); background: #1d2635; }
+
+// Non-highlighted pricing CTA
+.lp-btn-soft { background: transparent; color: var(--lp-ac-hi); border-color: var(--lp-line-bright); }
+.lp-btn-soft:hover { color: var(--lp-on-ac); background: var(--lp-ac); border-color: var(--lp-ac); }
+
+// Closing CTA band
+.lp-btn-white { background: var(--lp-ac); color: var(--lp-on-ac); }
+.lp-btn-white:hover { color: var(--lp-on-ac); background: var(--lp-ac-hi); }
+.lp-btn-glass { background: transparent; color: var(--lp-ink); border-color: var(--lp-line); }
+.lp-btn-glass:hover { color: var(--lp-ink); border-color: var(--lp-ac); background: rgba(255,255,255,.04); }
+
+// ── Nav ─────────────────────────────────────────────────────────
+.lp-nav {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(6, 9, 15, 0.85); backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--lp-line-soft);
+}
+.lp-nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+.lp-brand { display: inline-flex; align-items: center; gap: 0.6rem; }
+// Squared mark with a clipped corner — a chart tile, not a badge.
+.lp-logo {
+  width: 34px; height: 34px; border-radius: 0.35rem; background: var(--lp-ac); color: var(--lp-on-ac);
+  font-weight: 800; display: grid; place-items: center; font-size: 0.84rem; letter-spacing: -0.02em;
+  clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%);
+}
+.lp-brand-name { font-weight: 800; font-family: 'Plus Jakarta Sans', sans-serif; color: #fff; letter-spacing: -0.02em; font-size: 1.08rem; }
+.lp-nav-links { display: flex; gap: 2rem; }
+.lp-nav-links a { color: var(--lp-ink-2); font-weight: 500; font-size: 0.93rem; transition: color .15s; }
+.lp-nav-links a:hover { color: var(--lp-ink); }
+.lp-nav-cta { display: flex; align-items: center; gap: 0.6rem; }
+.lp-nav-cta .lp-btn-ghost { border: 1px solid var(--lp-line); color: var(--lp-ink); }
+.lp-nav-cta .lp-btn-ghost:hover { border-color: var(--lp-ac); }
+
+// ── Hero ────────────────────────────────────────────────────────
+.lp-hero { position: relative; padding: 108px 0 64px; overflow: hidden; }
+
+// Blueprint grid: fine cells with a brighter major line every fifth,
+// faded out toward the bottom so it never fights the copy.
+.lp-hero::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(160,190,225,.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(160,190,225,.055) 1px, transparent 1px),
+    linear-gradient(to right, rgba(63,169,245,.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(63,169,245,.11) 1px, transparent 1px);
+  background-size: 34px 34px, 34px 34px, 170px 170px, 170px 170px;
+  -webkit-mask-image: radial-gradient(130% 100% at 50% 0%, #000 15%, rgba(0,0,0,.45) 55%, transparent 88%);
+  mask-image: radial-gradient(130% 100% at 50% 0%, #000 15%, rgba(0,0,0,.45) 55%, transparent 88%);
+}
+
+// Price histogram — an up-trending series of bars rising off the floor
+// of the hero. Each bar is its own background layer so the profile is
+// deliberate rather than a repeating pattern.
+.lp-hero-glow {
+  display: block; position: absolute; left: 0; right: 0; bottom: 0; height: 230px;
+  z-index: 0; pointer-events: none; opacity: .5;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac)),
+    linear-gradient(var(--lp-ac), var(--lp-ac)), linear-gradient(var(--lp-ac), var(--lp-ac));
+  background-size:
+    16px 44px, 16px 68px, 16px 54px, 16px 92px, 16px 74px, 16px 116px, 16px 90px,
+    16px 138px, 16px 112px, 16px 164px, 16px 136px, 16px 190px, 16px 158px, 16px 216px;
+  background-position:
+    4% bottom, 11% bottom, 18% bottom, 25% bottom, 32% bottom, 39% bottom, 46% bottom,
+    53% bottom, 60% bottom, 67% bottom, 74% bottom, 81% bottom, 88% bottom, 95% bottom;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 78%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 78%);
+}
+
+.lp-hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.02fr 1.12fr; gap: 56px; align-items: center; }
+
+// Squared tag with a leading accent tick — not a rounded pill.
+.lp-eyebrow-pill {
+  display: inline-flex; align-items: center; gap: 0.7rem;
+  background: rgba(63,169,245,.06); color: var(--lp-ac-hi);
+  border: 1px solid var(--lp-line-bright); border-left-width: 0;
+  padding: 0.46rem 0.95rem 0.46rem 0.8rem; border-radius: 0.35rem;
+  font-size: 0.79rem; font-weight: 600; letter-spacing: -0.005em;
+}
+.lp-dot { width: 3px; height: 16px; border-radius: 1px; background: var(--lp-ac); flex-shrink: 0; }
+
+.lp-h1 { font-size: 4.1rem; line-height: 1.03; font-weight: 800; letter-spacing: -0.038em; margin: 1.6rem 0 0; color: #fff; }
+.lp-grad-text { background: var(--lp-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lp-lead { color: var(--lp-ink-2); font-size: 1.12rem; line-height: 1.68; margin: 1.5rem 0 2rem; max-width: 32rem; }
+.lp-hero-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.lp-hero-ticks { display: flex; gap: 1.5rem; margin-top: 2rem; flex-wrap: wrap; }
+.lp-hero-ticks span { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--lp-ink-2); font-size: 0.87rem; font-weight: 500; }
+.lp-hero-ticks svg { color: var(--lp-pos); }
+
+// ── Product panels ──────────────────────────────────────────────
+// Instrument panels, not browser windows: squared corners, a ruled
+// header, and a label on the left where you'd read it first.
+.lp-hero-visual { position: relative; }
+.lp-hero-visual::before {
+  content: ''; position: absolute; inset: -4% -3%; border-radius: 14px;
+  background: linear-gradient(160deg, rgba(63,169,245,.16), transparent 55%);
+  filter: blur(40px); z-index: 0;
+}
+.lp-mock {
+  position: relative; z-index: 1; background: var(--lp-surface);
+  border: 1px solid var(--lp-line); border-radius: 10px; overflow: hidden;
+}
+.lp-mock-dash { position: relative; }
+.lp-mock-bar {
+  display: flex; align-items: center; gap: 0.3rem; padding: 0.85rem 1.15rem;
+  border-bottom: 1px solid var(--lp-line); background: rgba(255,255,255,.02);
+}
+.lp-mock-bar-plain { background: rgba(255,255,255,.02); }
+// Three stacked rules — a signal-strength tick, reading left to right.
+.lp-tl { width: 3px; border-radius: 1px; background: #3f4a5a; }
+.lp-tl.r { height: 8px; background: var(--lp-ac); }
+.lp-tl.y { height: 12px; }
+.lp-tl.g { height: 16px; }
+.lp-mock-title {
+  margin-left: 0.75rem; font-size: 0.86rem; font-weight: 700;
+  color: var(--lp-ink); letter-spacing: -0.015em;
+}
+.lp-mock-bar-plain .lp-mock-title { margin-left: 0; }
+
+.lp-mock-body { padding: 1.1rem; display: grid; gap: 0.7rem; }
+.lp-mini-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+// Data tiles carry a short tick on their top edge — the page's repeating
+// mark for "this is a measured value".
+.lp-mini-stat {
+  position: relative; background: var(--lp-surface-2); border: 1px solid var(--lp-line-soft);
+  border-radius: 8px; padding: 0.9rem 0.95rem 0.85rem; display: grid; gap: 0.2rem;
+}
+.lp-mini-stat::before { content: ''; position: absolute; left: 0.95rem; top: 0; width: 22px; height: 2px; background: var(--lp-ac); }
+.lp-mini-stat span { font-family: var(--lp-mono); font-size: 0.67rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lp-ink-3); }
+.lp-mini-stat strong { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.025em; color: #fff; }
+.lp-mini-stat em { font-style: normal; font-size: 0.76rem; font-weight: 700; }
+.lp-mini-stat em.up { color: var(--lp-pos); }
+
+.lp-mini-chart { background: var(--lp-surface-2); border: 1px solid var(--lp-line-soft); border-radius: 8px; padding: 0.85rem 0.95rem; }
+.lp-mini-chart-head { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--lp-ink); }
+.lp-muted { color: var(--lp-ink-2); } .lp-muted.sm, .sm { font-size: 0.76rem; }
+.lp-trend { width: 100%; height: 92px; }
+.lp-trend polyline { fill: none; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+.lp-trend-market { stroke: var(--lp-pos); stroke-dasharray: 5 4; opacity: .8; }
+.lp-trend-ours { stroke: var(--lp-ac-hi); }
+
+.lp-mini-alert { display: flex; align-items: center; gap: 0.7rem; background: var(--lp-surface-2); border: 1px solid var(--lp-line-soft); border-radius: 8px; padding: 0.7rem 0.85rem; }
+.lp-mini-alert-icon { width: 32px; height: 32px; border-radius: 6px; background: var(--lp-ac-wash); color: var(--lp-ac-hi); display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--lp-line-bright); }
+.lp-mini-alert-title { font-weight: 700; font-size: 0.88rem; color: var(--lp-ink); }
+
+// Status reads as a bracketed tag, left rule carrying the colour.
+.lp-chip {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: -0.005em;
+  padding: 0.26rem 0.6rem; border-radius: 0.25rem; white-space: nowrap;
+  border: 1px solid transparent; border-left-width: 2px;
+}
+.lp-chip.green { background: var(--lp-pos-wash); color: var(--lp-pos); border-color: rgba(62,212,143,.2); border-left-color: var(--lp-pos); }
+.lp-chip.amber { background: rgba(237,177,78,.11); color: var(--lp-amber); border-color: rgba(237,177,78,.2); border-left-color: var(--lp-amber); }
+.lp-chip.grey { background: rgba(160,185,215,.07); color: var(--lp-ink-2); border-color: var(--lp-line); border-left-color: var(--lp-ink-3); }
+
+.lp-float-alert {
+  position: absolute; right: -18px; bottom: 44px; z-index: 2;
+  background: var(--lp-surface-2); border: 1px solid var(--lp-line);
+  border-left: 2px solid var(--lp-ac); border-radius: 6px; padding: 0.7rem 1rem;
+}
+.lp-fw { font-weight: 700; font-size: 0.88rem; color: var(--lp-ink); }
+
+// ── Trust strip ─────────────────────────────────────────────────
+.lp-trust { border-top: 1px solid var(--lp-line-soft); border-bottom: 1px solid var(--lp-line-soft); background: var(--lp-bg-2); }
+.lp-trust-inner { display: flex; align-items: center; justify-content: center; gap: 2.4rem; padding: 30px 28px; flex-wrap: wrap; }
+.lp-trust-label { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; color: var(--lp-ink-3); }
+.lp-trust-logos { display: flex; gap: 2.6rem; flex-wrap: wrap; align-items: center; }
+.lp-trust-logo { font-weight: 800; color: #566577; letter-spacing: -0.01em; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.05rem; transition: color .18s; }
+.lp-trust-logo:hover { color: var(--lp-ink-2); }
+
+// ── Sections ────────────────────────────────────────────────────
+.lp-section { padding: 104px 0; }
+.lp-section-head { max-width: 680px; margin-bottom: 52px; }
+.lp-section-head.is-center { margin: 0 auto 56px; text-align: center; }
+// Section labels are ruled, not tracked-out — a short accent bar sets
+// the left edge the heading hangs from.
+.lp-eyebrow {
+  display: inline-flex; align-items: center; gap: 0.75rem;
+  font-size: 0.78rem; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--lp-ac-hi); margin-bottom: 1rem;
+}
+.lp-eyebrow::before { content: ''; width: 1.7rem; height: 2px; background: var(--lp-ac); flex-shrink: 0; }
+.lp-h2 { font-size: 2.7rem; line-height: 1.1; font-weight: 800; letter-spacing: -0.032em; margin: 0 0 1rem; color: #fff; }
+.lp-section-sub { color: var(--lp-ink-2); font-size: 1.08rem; line-height: 1.65; margin: 0; }
+
+// ── Feature grid ────────────────────────────────────────────────
+// Cards are ruled on the left when active, the way a spec sheet marks
+// the row you're reading.
+.lp-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.lp-feature-card {
+  position: relative; background: var(--lp-surface); border: 1px solid var(--lp-line);
+  border-radius: 10px; padding: 1.9rem 1.75rem; overflow: hidden;
+  transition: border-color .2s, background .2s;
+}
+.lp-feature-card::after {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--lp-ac); transform: scaleY(0); transform-origin: top;
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+}
+.lp-feature-card:hover { border-color: var(--lp-line-bright); background: var(--lp-raise); }
+.lp-feature-card:hover::after { transform: scaleY(1); }
+
+.lp-feat-icon {
+  width: 42px; height: 42px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 1.18rem; margin-bottom: 1.2rem; border: 1px solid var(--lp-line);
+  background: rgba(255,255,255,.03); color: var(--lp-ac-hi);
+}
+.lp-feat-icon.grad-primary { color: var(--lp-ac-hi); background: var(--lp-ac-wash); border-color: var(--lp-line-bright); }
+.lp-feat-icon.grad-info { color: #7cc6ff; background: rgba(124,198,255,.09); }
+.lp-feat-icon.grad-success { color: var(--lp-pos); background: var(--lp-pos-wash); border-color: rgba(62,212,143,.24); }
+.lp-feat-icon.grad-purple { color: #9fd6ff; background: rgba(159,214,255,.08); }
+.lp-feature-card h3 { font-size: 1.14rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 0.55rem; color: #fff; }
+.lp-feature-card p { color: var(--lp-ink-2); font-size: 0.94rem; line-height: 1.65; margin: 0; }
+.lp-feat-more {
+  display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 1rem;
+  font-weight: 700; font-size: 0.88rem; color: var(--lp-ac-hi); opacity: 0;
+  transition: opacity .2s;
+}
+.lp-feature-card:hover .lp-feat-more { opacity: 1; }
+
+// ── Workflow (3 steps) ──────────────────────────────────────────
+.lp-workflow { background: var(--lp-bg-2); border-top: 1px solid var(--lp-line-soft); border-bottom: 1px solid var(--lp-line-soft); }
+.lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; position: relative; }
+// Measured rule between the steps — ticked, like a ruler edge.
+.lp-steps::before {
+  content: ''; position: absolute; top: 92px; left: 12%; right: 12%; height: 2px;
+  background-image: repeating-linear-gradient(90deg, var(--lp-line-bright) 0 5px, transparent 5px 12px);
+}
+.lp-step {
+  position: relative; background: var(--lp-surface); border: 1px solid var(--lp-line);
+  border-radius: 10px; padding: 1.9rem 1.75rem; text-align: left;
+  transition: border-color .2s, background .2s;
+}
+.lp-step:hover { border-color: var(--lp-line-bright); background: var(--lp-raise); }
+// The index reads as an outlined plate, not a glowing numeral.
+.lp-step-num {
+  display: inline-block; font-family: var(--lp-mono); font-size: 0.86rem; font-weight: 700;
+  letter-spacing: 0.02em; color: var(--lp-ac-hi); line-height: 1;
+  border: 1px solid var(--lp-line-bright); border-radius: 0.3rem; padding: 0.4rem 0.6rem;
+  background: var(--lp-ac-wash);
+}
+.lp-step-icon {
+  width: 42px; height: 42px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 1.18rem; margin: 1.1rem 0; border: 1px solid var(--lp-line);
+  background: rgba(255,255,255,.03); color: var(--lp-ac-hi);
+}
+.lp-step-icon.grad-primary { color: var(--lp-ac-hi); background: var(--lp-ac-wash); border-color: var(--lp-line-bright); }
+.lp-step-icon.grad-info { color: #7cc6ff; background: rgba(124,198,255,.09); }
+.lp-step-icon.grad-success { color: var(--lp-pos); background: var(--lp-pos-wash); border-color: rgba(62,212,143,.24); }
+.lp-step h3 { font-size: 1.16rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 0.5rem; color: #fff; }
+.lp-step p { color: var(--lp-ink-2); font-size: 0.94rem; line-height: 1.65; margin: 0; }
+
+// ── Split sections (workspace + AI) ─────────────────────────────
+.lp-workspace, .lp-ai { background: var(--lp-bg-2); border-top: 1px solid var(--lp-line-soft); border-bottom: 1px solid var(--lp-line-soft); }
+.lp-split { display: grid; grid-template-columns: 1fr 1.12fr; gap: 56px; align-items: center; }
+.lp-checklist { list-style: none; padding: 0; margin: 0 0 2rem; display: grid; gap: 0.9rem; }
+.lp-checklist li { display: flex; align-items: center; gap: 0.7rem; font-weight: 500; color: var(--lp-ink); font-size: 0.99rem; }
+.lp-checklist svg { color: var(--lp-pos); flex-shrink: 0; }
+
+.lp-ptable { width: 100%; border-collapse: collapse; }
+.lp-ptable th {
+  text-align: left; font-family: var(--lp-mono); font-size: 0.67rem; letter-spacing: 0.04em;
+  color: var(--lp-ink-3); font-weight: 600; padding: 0.85rem 1.15rem; border-bottom: 1px solid var(--lp-line);
+}
+.lp-ptable td { padding: 0.8rem 1.15rem; border-bottom: 1px solid var(--lp-line-soft); font-weight: 600; font-size: 0.89rem; color: var(--lp-ink); }
+.lp-ptable tr:last-child td { border-bottom: 0; }
+.lp-ini {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 5px;
+  font-family: var(--lp-mono); font-size: 0.66rem; font-weight: 700; margin-right: 0.65rem;
+  vertical-align: middle; border: 1px solid var(--lp-line);
+}
+.lp-ini.t-green { background: var(--lp-ac-wash); color: var(--lp-ac-hi); }
+.lp-ini.t-amber { background: var(--lp-pos-wash); color: var(--lp-pos); }
+.lp-ini.t-grey { background: rgba(160,185,215,.07); color: var(--lp-ink-2); }
+
+// ── Stats band ──────────────────────────────────────────────────
+// The grid returns here, tighter, so the numbers sit on ruled paper.
+.lp-stats { background: var(--lp-bg); padding: 76px 0; position: relative; overflow: hidden; }
+.lp-stats::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(160,190,225,.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(160,190,225,.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 45%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 45%, transparent);
+}
+.lp-stats-grid { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; text-align: left; }
+.lp-stat {
+  position: relative; background: var(--lp-surface); border: 1px solid var(--lp-line);
+  border-radius: 10px; padding: 1.5rem 1.5rem 1.4rem;
+}
+.lp-stat::before { content: ''; position: absolute; left: 1.5rem; top: 0; width: 26px; height: 2px; background: var(--lp-ac); }
+.lp-stat-n {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2.6rem; font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1; color: #fff;
+}
+.lp-stat-l { font-family: var(--lp-mono); color: var(--lp-ink-3); font-size: 0.7rem; letter-spacing: 0.03em; text-transform: uppercase; margin-top: 0.7rem; }
+
+// ── AI recommendation panel ─────────────────────────────────────
+.lp-ai-card .lp-mock-body { gap: 0.85rem; }
+.lp-ai-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.lp-ai-price {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2.3rem; font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1; color: var(--lp-pos); margin-top: 0.25rem;
+}
+.lp-ai-rows { display: grid; gap: 0.4rem; }
+.lp-ai-rows > div {
+  display: flex; align-items: center; justify-content: space-between; padding: 0.62rem 0.85rem;
+  background: var(--lp-surface-2); border: 1px solid var(--lp-line-soft); border-radius: 6px; font-size: 0.89rem;
+}
+.lp-ai-rows span { color: var(--lp-ink-2); }
+.lp-ai-rows strong { font-weight: 800; color: var(--lp-ink); }
+.lp-ai-rows strong.up { color: var(--lp-pos); }
+.lp-ai-reason {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem; border-radius: 6px;
+  background: var(--lp-ac-wash); border: 1px solid var(--lp-line-soft); border-left: 2px solid var(--lp-ac);
+  color: var(--lp-ink); font-size: 0.88rem; line-height: 1.55;
+}
+
+// ── Testimonial ─────────────────────────────────────────────────
+// Set as a pulled quote against a rule, not a floating quotation mark.
+.lp-quote-wrap { padding: 96px 0; }
+.lp-quote {
+  max-width: 860px; margin: 0 auto; text-align: left;
+  border-left: 2px solid var(--lp-ac); padding: 0.5rem 0 0.5rem 2.4rem;
+}
+.lp-quote-mark { display: none; }
+.lp-quote blockquote { font-size: 1.68rem; line-height: 1.5; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 1.8rem; color: #fff; }
+.lp-quote-author { display: inline-flex; align-items: center; gap: 0.8rem; }
+.lp-avatar { width: 44px; height: 44px; border-radius: 8px; background: var(--lp-ac-wash); border: 1px solid var(--lp-line-bright); color: var(--lp-ac-hi); display: grid; place-items: center; font-weight: 800; font-size: 0.9rem; }
+.lp-qa-name { font-weight: 700; text-align: left; color: var(--lp-ink); }
+.lp-qa-role { color: var(--lp-ink-3); font-size: 0.85rem; text-align: left; }
+
+// ── Pricing ─────────────────────────────────────────────────────
+.lp-price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; align-items: stretch; }
+.lp-price-card {
+  position: relative; display: flex; flex-direction: column; height: 100%;
+  background: var(--lp-surface); border: 1px solid var(--lp-line); border-radius: 10px;
+  padding: 2.1rem 1.8rem; transition: border-color .2s;
+}
+.lp-price-card:hover { border-color: var(--lp-line-bright); }
+// The chosen plan is marked with a solid top rule, not a halo.
+.lp-price-card.is-popular { border-color: var(--lp-line-bright); background: #101c2b; }
+.lp-price-card.is-popular::before { content: ''; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px; background: var(--lp-ac); border-radius: 10px 10px 0 0; }
+.lp-popular-badge {
+  position: absolute; top: 1.5rem; right: 1.5rem;
+  background: var(--lp-ac-wash); color: var(--lp-ac-hi); border: 1px solid var(--lp-line-bright);
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 0.28rem 0.55rem; border-radius: 0.25rem;
+}
+.lp-price-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.lp-price-tagline { color: var(--lp-ink-2); font-size: 0.88rem; line-height: 1.45; margin: 0.35rem 0 1.4rem; min-height: 2.7em; }
+.lp-price-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2.5rem; font-weight: 800; line-height: 1; letter-spacing: -0.035em; margin-bottom: 0.4rem; white-space: nowrap; color: #fff; }
+.lp-price-amount span { font-size: 0.92rem; font-weight: 600; color: var(--lp-ink-3); margin-left: 0.2rem; }
+.lp-price-card .lp-btn { margin-top: 1.4rem; }
+.lp-price-points { list-style: none; padding: 1.5rem 0 0; margin: 1.5rem 0 0; border-top: 1px solid var(--lp-line-soft); display: grid; gap: 0.8rem; }
+.lp-price-points li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.91rem; font-weight: 500; color: var(--lp-ink-2); }
+.lp-price-points svg { color: var(--lp-pos); flex-shrink: 0; }
+.w-100 { width: 100%; }
+
+// ── Closing CTA ─────────────────────────────────────────────────
+.lp-cta {
+  position: relative; background: var(--lp-surface); border: 1px solid var(--lp-line);
+  border-top: 3px solid var(--lp-ac); border-radius: 12px;
+  padding: 76px 40px; text-align: center; color: var(--lp-ink); overflow: hidden;
+}
+.lp-cta::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(160,190,225,.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(160,190,225,.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%);
+  mask-image: linear-gradient(180deg, #000, transparent 85%);
+}
+.lp-cta > * { position: relative; }
+.lp-cta h2 { color: #fff; font-size: 2.45rem; font-weight: 800; letter-spacing: -0.035em; margin: 0 0 0.8rem; }
+.lp-cta p { color: var(--lp-ink-2); font-size: 1.1rem; margin: 0 0 2rem; }
+.lp-cta-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+// ── Footer ──────────────────────────────────────────────────────
+.lp-footer { background: #04070c; color: var(--lp-ink-2); border-top: 1px solid var(--lp-line-soft); padding: 72px 0 32px; }
+.lp-footer .lp-brand-name { color: #fff; }
+.lp-footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; }
+.lp-footer-brand p { color: var(--lp-ink-3); font-size: 0.92rem; line-height: 1.7; margin-top: 1.1rem; max-width: 19rem; }
+.lp-footer-col { display: flex; flex-direction: column; gap: 0.7rem; }
+.lp-footer-col-title { font-size: 0.8rem; letter-spacing: 0.02em; font-weight: 800; margin-bottom: 0.5rem; color: var(--lp-ink); }
+.lp-footer-col a { color: var(--lp-ink-3); font-size: 0.92rem; transition: color .15s; }
+.lp-footer-col a:hover { color: var(--lp-ac-hi); }
+.lp-footer-base { margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--lp-line-soft); color: #47536a; font-size: 0.83rem; }
+
+// ── Mobile nav ──────────────────────────────────────────────────
+.lp-nav-toggle {
+  display: none; width: 40px; height: 40px; border-radius: 0.4rem; border: 1px solid var(--lp-line);
+  background: var(--lp-surface); color: var(--lp-ink); align-items: center; justify-content: center; cursor: pointer;
+}
+.lp-mobile-drawer { display: none; }
+
+// ── Responsive ──────────────────────────────────────────────────
+@media (max-width: 900px) {
+  .lp-hero { padding: 72px 0 44px; }
+  .lp-hero-glow { height: 150px; opacity: .35; }
+  .lp-hero-grid, .lp-split { grid-template-columns: 1fr; gap: 40px; }
+  .lp-feature-grid, .lp-price-grid { grid-template-columns: 1fr; }
+  .lp-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-footer-grid { grid-template-columns: 1fr 1fr; }
+  .lp-nav-links { display: none; }
+  .lp-section { padding: 68px 0; }
+  .lp-h1 { font-size: 2.85rem; } .lp-h2 { font-size: 2rem; }
+  .lp-quote { padding-left: 1.4rem; }
+  .lp-quote blockquote { font-size: 1.35rem; }
+  .lp-cta { padding: 52px 24px; }
+  .lp-cta h2 { font-size: 1.9rem; }
+  .lp-float-alert { display: none; }
+  .lp-feat-more { opacity: 1; }
+  .lp-feature-card::after { transform: scaleY(1); }
+  .lp-steps { grid-template-columns: 1fr; }
+  .lp-steps::before { display: none; }
+  .lp-popular-badge { position: static; align-self: flex-start; margin-bottom: 0.8rem; }
+
+  .lp-nav-cta { display: none; }
+  .lp-nav-toggle { display: inline-flex; }
+  .lp-mobile-drawer {
+    display: flex; flex-direction: column; gap: 0.5rem; padding: 16px 24px 22px;
+    background: rgba(6,9,15,.97); backdrop-filter: blur(14px); border-bottom: 1px solid var(--lp-line);
+    animation: lp-drawer .18s ease;
+  }
+  .lp-mobile-drawer a:not(.lp-btn) { padding: 0.7rem 0.25rem; color: var(--lp-ink); font-weight: 600; border-bottom: 1px solid var(--lp-line-soft); }
+  .lp-mobile-drawer .lp-btn { justify-content: center; margin-top: 0.4rem; }
+}
+@keyframes lp-drawer { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-feature-card::after { transition: none; }
+}
