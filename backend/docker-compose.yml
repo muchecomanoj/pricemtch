@@ -1,0 +1,12 @@
+services:
+  dtcpicking-backend:
+    image: backend-pricematch:latest
+    container_name: backend-pricematch
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Doracle.jdbc.timezoneAsRegion=false"
