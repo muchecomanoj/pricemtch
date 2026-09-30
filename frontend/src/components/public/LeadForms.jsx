@@ -131,9 +131,26 @@ export function ContactForm() {
 // Subscribing an address that is already on the list gets the same success
 // message on purpose: "already subscribed" would let a stranger use this form
 // to find out who is on the list. So there is no such case to handle here.
-export function NewsletterForm() {
+//
+// `landing` styles it for the landing page's dark footer instead of Bootstrap.
+export function NewsletterForm({ landing = false }) {
   const { form, onSubmit, status, busy } = useLeadForm(({ email }) => publicService.newsletter(email), ['email'])
   const err = form.formState.errors.email
+  if (landing) {
+    return (
+      <form onSubmit={onSubmit} noValidate>
+        <div className="lp-newsletter-row">
+          <input type="email" className={`lp-input ${err ? 'is-invalid' : ''}`} placeholder="you@company.com"
+            aria-label="Email for the newsletter" aria-invalid={!!err} {...form.register('email', emailRules)} />
+          <button type="submit" className="lp-btn lp-btn-primary" disabled={busy}>
+            {busy ? 'Subscribing…' : 'Subscribe'}
+          </button>
+        </div>
+        {err && <div className="lp-form-msg is-error">{err.message}</div>}
+        {status && <div className={`lp-form-msg ${status.ok ? 'is-ok' : 'is-error'}`} role="status">{status.text}</div>}
+      </form>
+    )
+  }
   return (
     <form onSubmit={onSubmit} noValidate>
       <div className="input-group has-validation">
