@@ -4,7 +4,7 @@ import MainLayout from '../layouts/MainLayout'
 import ProtectedRoute from './ProtectedRoute'
 import Loader from '../components/common/Loader'
 import { useAuth } from '../context/AuthContext'
-import { ADMIN_ROLES, SCREEN_ACCESS, homePathForUser } from '../constants'
+import { ADMIN_ROLES, SCREEN_ACCESS, homePathForUser, canAccessPath } from '../constants'
 
 // The front door.
 //
@@ -18,6 +18,15 @@ function RootRedirect() {
   if (loading) return <Loader />
   if (!isAuthenticated) return <Landing />
   return <Navigate to={homePathForUser(user)} replace />
+}
+
+// The dashboard is a company's. Someone who can't see it — the platform
+// owner, who has no company — is sent to their own home instead of a blank
+// page (an old bookmark, a stale link).
+function DashboardRoute() {
+  const { user } = useAuth()
+  if (user && !canAccessPath(user, '/dashboard')) return <Navigate to={homePathForUser(user)} replace />
+  return <Dashboard />
 }
 
 // Lazy-loaded pages -> smaller initial bundle.
@@ -102,7 +111,7 @@ export default function AppRoutes() {
         {/* Authenticated area. Role access is centralized in SCREEN_ACCESS —
             each route is guarded by the same rules the sidebar uses. */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardRoute />} />
           <Route path="/products" element={<ProtectedRoute roles={SCREEN_ACCESS['/products']}><Products /></ProtectedRoute>} />
           <Route path="/products/:id" element={<ProtectedRoute roles={SCREEN_ACCESS['/products']}><ProductDetails /></ProtectedRoute>} />
           <Route path="/search" element={<ProtectedRoute roles={SCREEN_ACCESS['/search']}><SearchProduct /></ProtectedRoute>} />
