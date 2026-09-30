@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    base: '/pricematch-react/',
     css: {
       preprocessorOptions: {
         scss: {
