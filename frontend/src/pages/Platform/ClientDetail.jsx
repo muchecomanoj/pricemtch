@@ -6,7 +6,7 @@ import {
   FiRotateCw, FiSlash, FiPause, FiPlay, FiDollarSign, FiCheck, FiArrowUp, FiArrowDown,
   FiActivity, FiShield,
 } from 'react-icons/fi'
-import { normalizePlans } from '../../utils/plans'
+import { normalizePlans, planPeriodLabel } from '../../utils/plans'
 import Breadcrumb from '../../components/common/Breadcrumb'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
@@ -117,7 +117,7 @@ export default function ClientDetail() {
       <div className="row g-3 mb-4">
         <SummaryTile icon={FiCreditCard} label="Plan" grad={client.subscriptionPlan ? 'primary' : 'warning'}
           value={client.subscriptionPlan || 'Not selected'}
-          sub={client.subscriptionPlan && client.billingCycle ? client.billingCycle.toLowerCase() : null} />
+          sub={planPeriodLabel(client)} />
         <SummaryTile icon={FiActivity} label="Subscription" grad="info"
           value={client.subscriptionStatus || 'Awaiting onboarding'} />
         <SummaryTile icon={FiShield} label="Tenant status" grad={suspended ? 'warning' : 'success'}

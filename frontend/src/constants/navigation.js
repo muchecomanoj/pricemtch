@@ -2,7 +2,7 @@ import {
   FiGrid, FiBox, FiSearch, FiSettings, FiBell, FiFileText,
   FiTrendingUp, FiDollarSign, FiList, FiShield,
   FiDatabase, FiTag, FiAward, FiRadio, FiActivity,
-  FiBriefcase, FiLayers, FiHome, FiCreditCard,
+  FiBriefcase, FiLayers, FiHome, FiCreditCard, FiInbox, FiEdit3,
 } from 'react-icons/fi'
 import { ADMIN_ROLES, SCREEN_ACCESS } from './index'
 
@@ -38,6 +38,8 @@ export const NAV_ITEMS = [
   // Platform admin (SYSTEM_ADMIN)
   { label: 'Clients', path: '/platform/clients', icon: FiBriefcase },
   { label: 'Plans', path: '/platform/plans', icon: FiLayers },
+  { label: 'Submissions', path: '/platform/submissions', icon: FiInbox },
+  { label: 'Landing Content', path: '/platform/landing-content', icon: FiEdit3 },
   // Tenant self-service
   { label: 'Company', path: '/company', icon: FiHome },
   { label: 'My Subscription', path: '/my-subscription', icon: FiCreditCard },

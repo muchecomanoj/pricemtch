@@ -30,7 +30,7 @@ const GROUPS = [
   },
   { label: 'Operations', paths: ['/alerts', '/reports', '/ai-analyst', '/ai-activity'] },
   { label: 'Account', paths: ['/company', '/my-subscription'] },
-  { label: 'Platform', paths: ['/platform/clients', '/platform/plans'] },
+  { label: 'Platform', paths: ['/platform/clients', '/platform/plans', '/platform/submissions', '/platform/landing-content'] },
   { label: 'Admin', paths: ['/users', '/settings'] },
 ]
 

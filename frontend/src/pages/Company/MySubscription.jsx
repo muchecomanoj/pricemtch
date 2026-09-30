@@ -10,7 +10,7 @@ import DataTable from '../../components/tables/DataTable'
 import { useAuth } from '../../context/AuthContext'
 import { tenantService } from '../../services/tenantService'
 import { useNotification } from '../../context/NotificationContext'
-import { normalizePlans } from '../../utils/plans'
+import { normalizePlans, isFreePlan, FREE_PLAN_CODE } from '../../utils/plans'
 import { formatCurrency, formatDate, daysUntil } from '../../utils/format'
 
 const PAY_STATUS_TONE = { PAID: 'success', PENDING: 'warning', FAILED: 'danger', CANCELLED: 'secondary' }
@@ -26,13 +26,15 @@ const stillPaid = (endDate) => {
 }
 
 // The line under "Paid until". Nothing renews on its own, so the count is
-// what tells a customer to act.
-function timeLeft(days) {
+// what tells a customer to act. A free plan can't be renewed, only replaced
+// by a paid one, so its nudge says that instead.
+function timeLeft(days, free) {
   if (days == null) return null
+  const act = free ? 'choose a plan' : 'renew soon'
   if (days < 0) return { text: 'Ended', cls: 'text-danger' }
-  if (days === 0) return { text: 'Ends today — renew soon', cls: 'text-warning' }
+  if (days === 0) return { text: `Ends today — ${act}`, cls: 'text-warning' }
   const text = `${days} day${days === 1 ? '' : 's'} left`
-  return days <= 7 ? { text: `${text} — renew soon`, cls: 'text-warning' } : { text, cls: 'text-muted' }
+  return days <= 7 ? { text: `${text} — ${act}`, cls: 'text-warning' } : { text, cls: 'text-muted' }
 }
 
 // Tenant self-service — the logged-in company managing its OWN plan.
@@ -56,7 +58,12 @@ export default function MySubscription() {
   const sub = subQ.data
   const plans = normalizePlans(plansQ.data)
   const currentCode = sub?.subscriptionPlan || ''
-  const currentMonthly = plans.find((p) => p.code === currentCode)?.price?.monthly ?? -1
+  const currentPlan = plans.find((p) => p.code === currentCode)
+  const currentMonthly = currentPlan?.price?.monthly ?? -1
+  // Free can't be renewed (the backend answers 400); upgrading is the way on.
+  // No plan at all counts as free, as it does on the backend. A code missing
+  // from the list (normalizePlans drops duplicate tiers) is not assumed free.
+  const isFree = !currentCode || currentCode === FREE_PLAN_CODE || (!!currentPlan && isFreePlan(currentPlan))
 
   // A synchronous guard as well as `busy`: a double-click lands both clicks
   // before React re-renders, and on this page that is two payments.
@@ -94,6 +101,8 @@ export default function MySubscription() {
       subQ.refetch()
       refreshUser().catch(() => {})
     } catch (e) {
+      // The backend's refusal for a free plan reads well as sent ("…your data
+      // is kept either way"), so it is shown as is.
       notify.error(e.message || 'Could not start the renewal')
     } finally {
       inFlight.current = false
@@ -137,7 +146,7 @@ export default function MySubscription() {
 
   const used = dashQ.data?.totalUsers
   const maxUsers = dashQ.data?.maxUsers ?? sub?.maxUsers
-  const left = timeLeft(endsIn)
+  const left = timeLeft(endsIn, isFree)
   const toPlans = () => document.getElementById('change-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const tiles = [
@@ -151,7 +160,7 @@ export default function MySubscription() {
     },
     {
       icon: FiCalendar,
-      label: 'Paid until',
+      label: isFree ? 'Free until' : 'Paid until',
       value: formatDate(sub?.subscriptionEndDate),
       extra: left && <div className={`small mt-1 ${left.cls}`}>{left.text}</div>,
     },
@@ -194,7 +203,7 @@ export default function MySubscription() {
           <div className="col-md-4"><div className="text-muted small">Status</div>
             <StatusBadge status={/active/i.test(sub?.subscriptionStatus) ? 'success' : /trial/i.test(sub?.subscriptionStatus) ? 'info' : 'secondary'} label={sub?.subscriptionStatus || '—'} /></div>
           <div className="col-md-4"><div className="text-muted small">Start date</div><div className="fw-semibold">{formatDate(sub?.subscriptionStartDate)}</div></div>
-          <div className="col-md-4"><div className="text-muted small">Paid until</div><div className="fw-semibold">{formatDate(sub?.subscriptionEndDate)}</div></div>
+          <div className="col-md-4"><div className="text-muted small">{isFree ? 'Free until' : 'Paid until'}</div><div className="fw-semibold">{formatDate(sub?.subscriptionEndDate)}</div></div>
         </div>
       </Card>
 
@@ -238,7 +247,19 @@ export default function MySubscription() {
                       ))}
                     </ul>
                     <div className="mt-auto">
-                      {isCurrent && renewDue ? (
+                      {isCurrent && isFree && renewDue ? (
+                        // Free can't be renewed. The paid cards beside this
+                        // one are the way on, so point there instead.
+                        <>
+                          <Button size="sm" icon={FiArrowUp} className="w-100 justify-content-center"
+                            disabled={!!busy} onClick={toPlans}>
+                            Choose a plan
+                          </Button>
+                          <div className="text-muted small text-center mt-1">
+                            {endsIn != null && endsIn < 0 ? 'Free trial ended' : 'Free until'} {formatDate(sub?.subscriptionEndDate)}
+                          </div>
+                        </>
+                      ) : isCurrent && renewDue ? (
                         <>
                           <Button size="sm" icon={FiRefreshCw} className="w-100 justify-content-center"
                             loading={busy === p.code} disabled={!!busy} onClick={() => renew(p, shown)}>

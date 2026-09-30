@@ -20,7 +20,7 @@ export const YEARLY_DISCOUNT = 0.2   // 20% off when billed yearly
 
 // Presentation-only metadata the API doesn't carry, keyed by plan code.
 const META = {
-  FREE: { icon: 'rocket', color: 'info', tagline: 'Try it out, no card required' },
+  FREE: { icon: 'rocket', color: 'info', tagline: 'Try it out, no card needed' },
   BASIC: { icon: 'zap', color: 'primary', tagline: 'For small teams getting started' },
   PRO: { icon: 'briefcase', color: 'success', tagline: 'Most popular for growing businesses', recommended: true },
   ENTERPRISE: { icon: 'shield', color: 'warning', tagline: 'Custom scale and controls' },
@@ -90,6 +90,33 @@ export function normalizePlans(apiPlans) {
 
   const list = [...seen.values()].sort((a, b) => a.price.monthly - b.price.monthly)
   return list.length ? list : MOCK_PLANS
+}
+
+// A free plan is its trial and nothing more: it ends when the trial does, can't
+// be renewed (the backend refuses with a 400), and never goes to Stripe, which
+// rejects a zero-amount checkout. Price, not code, decides — the catalog is
+// editable in Plans admin. No plan at all counts as free, as the backend does.
+export function isFreePlan(plan) {
+  return !plan || !(Number(plan.price?.monthly) > 0)
+}
+
+// The plan code alone, for places that only have the account (the banner).
+// FREE is the backend's code for the free tier.
+export const FREE_PLAN_CODE = 'FREE'
+
+// The line under a company's plan name (platform admin screens). A paid plan
+// shows its billing cycle. Free has no cycle — the backend ignores it and the
+// trial is the whole period — so "Yearly" there read as a free year; it shows
+// the trial length instead, from the company's own dates.
+export function planPeriodLabel(company) {
+  if (!company?.subscriptionPlan) return null
+  if (company.subscriptionPlan !== FREE_PLAN_CODE) {
+    return company.billingCycle ? company.billingCycle.toLowerCase() : null
+  }
+  const start = Date.parse(company.subscriptionStartDate || '')
+  const end = Date.parse(company.trialEndDate || company.subscriptionEndDate || '')
+  const days = Math.round((end - start) / 86400000)
+  return days > 0 ? `${days}-day trial` : 'Free trial'
 }
 
 // The yearly discount to advertise on the billing toggle — the largest real

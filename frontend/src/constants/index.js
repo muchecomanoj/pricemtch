@@ -122,6 +122,9 @@ export const SCREEN_ACCESS = {
   // Platform owner only
   '/platform/clients': CAPABILITIES.MANAGE_CLIENTS,
   '/platform/plans': CAPABILITIES.MANAGE_PLANS,
+  // The public website's back office — same owner as the plan catalog.
+  '/platform/submissions': CAPABILITIES.MANAGE_PLANS,
+  '/platform/landing-content': CAPABILITIES.MANAGE_PLANS,
   // Tenant self-service (admin manages their own company)
   '/company': CAPABILITIES.MANAGE_COMPANY,
   '/my-subscription': CAPABILITIES.MANAGE_COMPANY,

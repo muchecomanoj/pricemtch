@@ -56,11 +56,14 @@ const ClientsAdmin = lazy(() => import('../pages/Platform/ClientsAdmin'))
 const ClientDetail = lazy(() => import('../pages/Platform/ClientDetail'))
 const CreateClientWizard = lazy(() => import('../pages/Platform/CreateClientWizard'))
 const PlansAdmin = lazy(() => import('../pages/Platform/PlansAdmin'))
+const SubmissionsAdmin = lazy(() => import('../pages/Platform/SubmissionsAdmin'))
+const LandingContentAdmin = lazy(() => import('../pages/Platform/LandingContentAdmin'))
 const Company = lazy(() => import('../pages/Company/Company'))
 const MySubscription = lazy(() => import('../pages/Company/MySubscription'))
 const BillingReturn = lazy(() => import('../pages/Billing/BillingReturn'))
 const PublicPricing = lazy(() => import('../pages/Public/PublicPricing'))
 const Landing = lazy(() => import('../pages/Public/Landing'))
+const Unsubscribe = lazy(() => import('../pages/Public/Unsubscribe'))
 const NotFound = lazy(() => import('../pages/Error/NotFound'))
 const Forbidden = lazy(() => import('../pages/Error/Forbidden'))
 const ErrorPage = lazy(() => import('../pages/Error/ErrorPage'))
@@ -93,6 +96,8 @@ export default function AppRoutes() {
         <Route path="/home" element={<Landing />} />
         <Route path="/pricing" element={<Landing />} />
         <Route path="/pricing-legacy" element={<PublicPricing />} />
+        {/* The link in every newsletter's footer. */}
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
 
         {/* Authenticated area. Role access is centralized in SCREEN_ACCESS —
             each route is guarded by the same rules the sidebar uses. */}
@@ -134,6 +139,8 @@ export default function AppRoutes() {
           <Route path="/platform/clients/new" element={<ProtectedRoute roles={SCREEN_ACCESS['/platform/clients']}><CreateClientWizard /></ProtectedRoute>} />
           <Route path="/platform/clients/:id" element={<ProtectedRoute roles={SCREEN_ACCESS['/platform/clients']}><ClientDetail /></ProtectedRoute>} />
           <Route path="/platform/plans" element={<ProtectedRoute roles={SCREEN_ACCESS['/platform/plans']}><PlansAdmin /></ProtectedRoute>} />
+          <Route path="/platform/submissions/:tab?" element={<ProtectedRoute roles={SCREEN_ACCESS['/platform/submissions']}><SubmissionsAdmin /></ProtectedRoute>} />
+          <Route path="/platform/landing-content" element={<ProtectedRoute roles={SCREEN_ACCESS['/platform/landing-content']}><LandingContentAdmin /></ProtectedRoute>} />
           {/* Tenant self-service */}
           <Route path="/company" element={<ProtectedRoute roles={SCREEN_ACCESS['/company']}><Company /></ProtectedRoute>} />
           <Route path="/my-subscription" element={<ProtectedRoute roles={SCREEN_ACCESS['/my-subscription']}><MySubscription /></ProtectedRoute>} />

@@ -1,11 +1,9 @@
-import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FiCheck } from 'react-icons/fi'
-import Button from '../../components/common/Button'
 import Card from '../../components/common/Card'
 import { publicService } from '../../services/publicService'
-import { useNotification } from '../../context/NotificationContext'
+import { DemoForm, ContactForm, NewsletterForm } from '../../components/public/LeadForms'
 import { APP_NAME } from '../../constants'
 import { formatCurrency } from '../../utils/format'
 
@@ -15,6 +13,10 @@ export default function PublicPricing() {
   const features = useQuery({ queryKey: ['pub', 'features'], queryFn: publicService.features })
   const faqs = useQuery({ queryKey: ['pub', 'faqs'], queryFn: publicService.faqs })
   const testimonials = useQuery({ queryKey: ['pub', 'testimonials'], queryFn: publicService.testimonials })
+  // Each is a landing section { eyebrow?, title?, items }, not a bare list.
+  const featureItems = features.data?.items || []
+  const faqItems = faqs.data?.items || []
+  const testimonialItems = testimonials.data?.items || []
 
   return (
     <div style={{ background: 'var(--app-bg)', minHeight: '100vh' }}>
@@ -55,9 +57,9 @@ export default function PublicPricing() {
         </div>
 
         {/* Features */}
-        {(features.data || []).length > 0 && (
+        {featureItems.length > 0 && (
           <div className="row g-3 mb-5">
-            {(features.data || []).map((f, i) => (
+            {featureItems.map((f, i) => (
               <div className="col-md-4" key={i}>
                 <Card><h6 className="fw-semibold">{f.title || f.name}</h6><p className="text-muted small mb-0">{f.description}</p></Card>
               </div>
@@ -66,9 +68,9 @@ export default function PublicPricing() {
         )}
 
         {/* Testimonials */}
-        {(testimonials.data || []).length > 0 && (
+        {testimonialItems.length > 0 && (
           <div className="row g-3 mb-5">
-            {(testimonials.data || []).map((t, i) => (
+            {testimonialItems.map((t, i) => (
               <div className="col-md-6" key={i}>
                 <Card><p className="mb-2">“{t.quote || t.message}”</p><div className="fw-semibold small">— {t.name}</div></Card>
               </div>
@@ -77,9 +79,9 @@ export default function PublicPricing() {
         )}
 
         {/* FAQs */}
-        {(faqs.data || []).length > 0 && (
-          <Card title="Frequently asked questions" className="mb-5">
-            {(faqs.data || []).map((f, i) => (
+        {faqItems.length > 0 && (
+          <Card title={faqs.data?.title || 'Frequently asked questions'} className="mb-5">
+            {faqItems.map((f, i) => (
               <div key={i} className="py-2 border-bottom">
                 <div className="fw-semibold">{f.question}</div>
                 <div className="text-muted small">{f.answer}</div>
@@ -90,68 +92,13 @@ export default function PublicPricing() {
 
         {/* Lead forms */}
         <div className="row g-3">
-          <div className="col-md-6"><DemoForm /></div>
-          <div className="col-md-6"><ContactForm /><NewsletterForm /></div>
+          <div className="col-md-6"><Card title="Request a demo"><DemoForm /></Card></div>
+          <div className="col-md-6">
+            <Card title="Contact us" className="mb-3"><ContactForm /></Card>
+            <Card title="Newsletter"><NewsletterForm /></Card>
+          </div>
         </div>
       </div>
     </div>
-  )
-}
-
-function DemoForm() {
-  const { notify } = useNotification()
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm()
-  const onSubmit = async (v) => {
-    try { await publicService.requestDemo(v); notify.success('Demo request sent'); reset() }
-    catch (e) { notify.error(e.message || 'Failed to send') }
-  }
-  return (
-    <Card title="Request a demo">
-      <form onSubmit={handleSubmit(onSubmit)} className="row g-2">
-        <div className="col-md-6"><input className="form-control" placeholder="Name" {...register('name', { required: true })} /></div>
-        <div className="col-md-6"><input type="email" className="form-control" placeholder="Email" {...register('email', { required: true })} /></div>
-        <div className="col-md-6"><input className="form-control" placeholder="Phone" {...register('phone')} /></div>
-        <div className="col-md-6"><input className="form-control" placeholder="Company" {...register('companyName')} /></div>
-        <div className="col-12"><textarea className="form-control" rows={2} placeholder="Message" {...register('message')} /></div>
-        <div className="col-12 d-flex justify-content-end"><Button type="submit" size="sm" loading={isSubmitting}>Request Demo</Button></div>
-      </form>
-    </Card>
-  )
-}
-
-function ContactForm() {
-  const { notify } = useNotification()
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm()
-  const onSubmit = async (v) => {
-    try { await publicService.contact(v); notify.success('Message sent'); reset() }
-    catch (e) { notify.error(e.message || 'Failed to send') }
-  }
-  return (
-    <Card title="Contact us" className="mb-3">
-      <form onSubmit={handleSubmit(onSubmit)} className="row g-2">
-        <div className="col-md-6"><input className="form-control" placeholder="Name" {...register('name', { required: true })} /></div>
-        <div className="col-md-6"><input type="email" className="form-control" placeholder="Email" {...register('email', { required: true })} /></div>
-        <div className="col-12"><input className="form-control" placeholder="Subject" {...register('subject')} /></div>
-        <div className="col-12"><textarea className="form-control" rows={2} placeholder="Message" {...register('message')} /></div>
-        <div className="col-12 d-flex justify-content-end"><Button type="submit" size="sm" loading={isSubmitting}>Send</Button></div>
-      </form>
-    </Card>
-  )
-}
-
-function NewsletterForm() {
-  const { notify } = useNotification()
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm()
-  const onSubmit = async (v) => {
-    try { await publicService.newsletter(v.email); notify.success('Subscribed'); reset() }
-    catch (e) { notify.error(e.message || 'Failed') }
-  }
-  return (
-    <Card title="Newsletter">
-      <form onSubmit={handleSubmit(onSubmit)} className="input-group">
-        <input type="email" className="form-control" placeholder="you@company.com" {...register('email', { required: true })} />
-        <Button type="submit" loading={isSubmitting}>Subscribe</Button>
-      </form>
-    </Card>
   )
 }
