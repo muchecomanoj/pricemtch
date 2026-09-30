@@ -496,6 +496,28 @@
 .lp-footer-col-title { font-size: 0.8rem; letter-spacing: 0.02em; font-weight: 800; margin-bottom: 0.5rem; color: var(--lp-ink); }
 .lp-footer-col a { color: var(--lp-ink-3); font-size: 0.92rem; transition: color .15s; }
 .lp-footer-col a:hover { color: var(--lp-ac-hi); }
+.lp-footer-col button.lp-footer-link {
+  background: none; border: 0; padding: 0; text-align: left; font: inherit;
+  color: var(--lp-ink-3); font-size: 0.92rem; cursor: pointer; transition: color .15s;
+}
+.lp-footer-col button.lp-footer-link:hover { color: var(--lp-ac-hi); }
+
+// Newsletter sign-up under the footer blurb.
+.lp-newsletter { margin-top: 1.4rem; max-width: 22rem; }
+.lp-newsletter-label { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.02em; color: var(--lp-ink); margin-bottom: 0.6rem; }
+.lp-newsletter-row { display: flex; gap: 0.5rem; }
+.lp-newsletter .lp-btn { padding: 0.6rem 1rem; }
+.lp-newsletter .lp-btn:disabled { opacity: .6; cursor: default; }
+.lp-input {
+  flex: 1; min-width: 0; background: var(--lp-surface); color: var(--lp-ink);
+  border: 1px solid var(--lp-line); border-radius: 0.4rem; padding: 0.6rem 0.8rem; font-size: 0.92rem;
+}
+.lp-input::placeholder { color: var(--lp-ink-3); }
+.lp-input:focus { outline: none; border-color: var(--lp-ac); }
+.lp-input.is-invalid { border-color: #ef4444; }
+.lp-form-msg { font-size: 0.83rem; margin-top: 0.5rem; line-height: 1.5; }
+.lp-form-msg.is-error { color: #f87171; }
+.lp-form-msg.is-ok { color: var(--lp-pos); }
 .lp-footer-base { margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--lp-line-soft); color: #47536a; font-size: 0.83rem; }
 
 // ── Mobile nav ──────────────────────────────────────────────────
