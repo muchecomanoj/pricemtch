@@ -23,7 +23,8 @@ ALTER TABLE newsletter_subscribers
     ADD COLUMN unsubscribe_token VARCHAR(64);
 
 UPDATE newsletter_subscribers
-SET unsubscribe_token = replace(gen_random_uuid()::text, '-', '')
+-- md5(random()) rather than gen_random_uuid(), which is only built in from PG 13.
+SET unsubscribe_token = md5(random()::text)
 WHERE unsubscribe_token IS NULL;
 
 ALTER TABLE newsletter_subscribers
