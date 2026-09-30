@@ -37,7 +37,7 @@ SET row_security = off;
 
 SET default_tablespace = '';
 
-SET default_table_access_method = heap;
+-- SET default_table_access_method = heap;  (removed: PG 12+ only; heap is the default anyway)
 
 --
 -- Name: activation_tokens; Type: TABLE; Schema: public; Owner: -
