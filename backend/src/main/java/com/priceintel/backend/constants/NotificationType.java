@@ -17,5 +17,8 @@ public enum NotificationType {
     /** A previously failing monitor completed again — closes the loop. */
     MONITOR_RECOVERED,
 
+    /** Someone filled in a form on the public site: a demo request or a message. */
+    LEAD_RECEIVED,
+
     GENERAL
 }
