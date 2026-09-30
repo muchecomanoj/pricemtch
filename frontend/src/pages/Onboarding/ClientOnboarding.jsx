@@ -607,6 +607,9 @@ function Payment({ plan, cycle, token, onPaid, onBack }) {
     try {
       const res = await onboardingService.checkout(token)
       if (res?.checkoutUrl) { window.location.assign(res.checkoutUrl); return } // real provider → redirect
+      // FREE: nothing to pay, and the backend has already activated the
+      // account — mock-confirm would find no payment to confirm.
+      if (res?.mode === 'FREE') { onPaid(res); return }
       setSession(res) // mock provider → show confirm button
     } catch (e) { notify.error(e.message || 'Could not start checkout') }
     finally { setBusy(false) }

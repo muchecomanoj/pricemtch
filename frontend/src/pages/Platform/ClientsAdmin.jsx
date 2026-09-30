@@ -17,6 +17,7 @@ import StatusBadge from '../../components/common/StatusBadge'
 import { clientService } from '../../services/clientService'
 import { useNotification } from '../../context/NotificationContext'
 import { daysUntil } from '../../utils/format'
+import { planPeriodLabel } from '../../utils/plans'
 import { PAGE_SIZE, TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
 
 // Deterministic gradient avatar per company, so rows are easier to scan.
@@ -130,7 +131,7 @@ export default function ClientsAdmin() {
       c.subscriptionPlan ? (
         <div>
           <span className="badge rounded-pill text-bg-primary">{c.subscriptionPlan}</span>
-          {c.billingCycle && <div className="text-muted small mt-1 text-capitalize">{c.billingCycle.toLowerCase()}</div>}
+          {planPeriodLabel(c) && <div className="text-muted small mt-1 text-capitalize">{planPeriodLabel(c)}</div>}
         </div>
       ) : <span className="badge rounded-pill text-bg-warning" title="The client picks a plan during onboarding">Not selected</span>
     ) },

@@ -124,6 +124,20 @@ export const ENDPOINTS = {
     match: '/ai/match',
     executions: '/ai/executions',
   },
+  // Platform admin — what visitors sent through the public forms.
+  adminSubmissions: {
+    summary: '/admin/submissions/summary',            // GET -> { demoRequestsPending, contactMessagesPending, newsletterSubscribers }
+    demoRequests: '/admin/submissions/demo-requests',         // GET ?handled&page&size
+    contactMessages: '/admin/submissions/contact-messages',   // GET ?handled&page&size
+    subscribers: '/admin/submissions/newsletter-subscribers', // GET ?page&size
+    demoHandled: (id) => `/admin/submissions/demo-requests/${id}/handled`,       // PUT ?handled=
+    contactHandled: (id) => `/admin/submissions/contact-messages/${id}/handled`, // PUT ?handled=
+  },
+  // Platform admin — the landing page's editable sections (hidden ones too).
+  adminLanding: {
+    list: '/admin/landing-content',                           // GET
+    section: (s) => `/admin/landing-content/${s}`,            // PUT { payload: "<json string>", active? }
+  },
   // Platform admin — manage tenant companies (clients) + subscriptions.
   adminClients: {
     list: '/admin/clients',
@@ -218,6 +232,8 @@ export const ENDPOINTS = {
     requestDemo: '/public/request-demo',
     contact: '/public/contact-us',
     newsletter: '/public/newsletter',
+    unsubscribe: '/public/newsletter/unsubscribe',   // POST ?token= — always succeeds
+    landing: '/public/landing',                      // GET — every visible section, in page order
     registration: '/public/client-registration',
     subscription: '/public/subscription',
   },

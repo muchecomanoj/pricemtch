@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom'
@@ -22,10 +22,14 @@ import { TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel, APP_NAME } from '../../cons
 import { formatCurrency } from '../../utils/format'
 import { publicService } from '../../services/publicService'
 import { usePaymentConfirm } from '../../hooks/usePaymentConfirm'
-import { normalizePlans, catalogDiscountPercent } from '../../utils/plans'
+import { normalizePlans, catalogDiscountPercent, isFreePlan } from '../../utils/plans'
 
 // Public self-signup: Plan → Profile → Verify → Password → Payment → Done.
+// A free plan skips Payment: Password goes straight to Done.
 const SCREENS = ['plan', 'profile', 'verify', 'password', 'payment', 'done']
+const FREE_STEPS = SIGNUP_STEPS.filter((s) => s.key !== 'payment')
+// Paid plans are charged from day one now, so the header promises no trial.
+const SUBTITLE = 'Set up your workspace'
 
 export default function SelfSignup() {
   const [params] = useSearchParams()
@@ -77,18 +81,31 @@ export default function SelfSignup() {
   const plan = plans.find((p) => p.code === data.planCode)
     || plans.find((p) => p.recommended)
     || plans[0]
+  const free = isFreePlan(plan)
   const patch = (p) => setData((d) => ({ ...d, ...p }))
   const next = () => setScreen((s) => Math.min(s + 1, SCREENS.length - 1))
   const back = () => setScreen((s) => Math.max(s - 1, 0))
 
+  // On a free plan the checkout call is still what creates the account — the
+  // backend answers mode FREE with nothing to pay — so it runs straight after
+  // the password rather than being presented as a payment step.
+  const afterPassword = async () => {
+    if (!free) return next()
+    const result = await signupService.checkout(data.token)
+    patch({ result })
+    setScreen(SCREENS.indexOf('done'))
+  }
+
   // Steps shown in the top bar (Done is the success screen, not a step).
+  // Free has 4 steps, so on Free, Done's index 4 marks them all complete.
+  const steps = free ? FREE_STEPS : SIGNUP_STEPS
   const stepIndex = { plan: 0, profile: 1, verify: 2, password: 3, payment: 4, done: 4 }[key]
 
   if (paidReturn) {
     return (
       <div className="ob-shell flex-column">
         <StepBar steps={SIGNUP_STEPS} currentIndex={SIGNUP_STEPS.length}
-          title={`Create your ${APP_NAME} account`} subtitle="Start your free trial"
+          title={`Create your ${APP_NAME} account`} subtitle={SUBTITLE}
           onExit={() => navigate('/login')} />
         <div className="ob-main">
           <div className="ob-body ob-center">
@@ -110,7 +127,7 @@ export default function SelfSignup() {
     return (
       <div className="ob-shell flex-column">
         <StepBar steps={SIGNUP_STEPS} currentIndex={4}
-          title={`Create your ${APP_NAME} account`} subtitle="Start your free trial"
+          title={`Create your ${APP_NAME} account`} subtitle={SUBTITLE}
           onExit={() => navigate('/login')} />
         <div className="ob-main">
           <div className="ob-body ob-center">
@@ -131,8 +148,8 @@ export default function SelfSignup() {
 
   return (
     <div className="ob-shell flex-column">
-      <StepBar steps={SIGNUP_STEPS} currentIndex={stepIndex}
-        title={`Create your ${APP_NAME} account`} subtitle="Start your free trial"
+      <StepBar steps={steps} currentIndex={stepIndex}
+        title={`Create your ${APP_NAME} account`} subtitle={SUBTITLE}
         onExit={() => navigate('/login')} />
 
       <div className="ob-main">
@@ -157,14 +174,15 @@ export default function SelfSignup() {
                   onVerified={(code) => { patch({ otpCode: code }); next() }} onBack={back} />
               )}
               {key === 'password' && (
-                <CreatePassword token={data.token} code={data.otpCode} onNext={next} onBack={back} />
+                <CreatePassword token={data.token} code={data.otpCode} free={free}
+                  onNext={afterPassword} onBack={back} />
               )}
               {key === 'payment' && (
                 <Payment plan={plan} cycle={data.cycle} token={data.token}
                   onPaid={(result) => { patch({ result }); next() }} onBack={back} />
               )}
               {key === 'done' && (
-                <Done email={data.email} plan={plan} result={data.result}
+                <Done email={data.email} plan={plan} free={free} result={data.result}
                   onGo={() => goToLogin(data.result?.loginUrl)} />
               )}
             </motion.div>
@@ -184,14 +202,20 @@ const Header = ({ title, sub }) => (
 
 /* ── Step 1: Choose plan (landing) ───────────────────────────── */
 function ChoosePlan({ plans, loading, selected, cycle, onPlan, onCycle, onNext }) {
-  const trial = plans.find((p) => p.trialDays)?.trialDays
+  // Only the free plan has a trial now; paid plans are charged from day one.
+  const freeDays = plans.find((p) => isFreePlan(p) && p.trialDays > 0)?.trialDays
   const yearlyDiscount = catalogDiscountPercent(plans)
   return (
     <div>
       <Header title="Choose the plan that fits your business"
-        sub={`Every plan starts with a ${trial || 14}-day free trial. No card charged today.`} />
+        sub={freeDays
+          ? `Try free for ${freeDays} days. Paid plans start as soon as you subscribe.`
+          : 'Paid plans start as soon as you subscribe.'} />
 
-      <div className="d-flex justify-content-center mb-4">
+      {/* The billing cycle makes no difference to a free plan. Hidden, not
+          removed, so the space doesn't jump as plans are clicked. */}
+      <div className="d-flex justify-content-center mb-4"
+        style={{ visibility: !loading && isFreePlan(selected) ? 'hidden' : 'visible' }}>
         <div className="btn-group">
           {[['MONTHLY', 'Monthly'], ['YEARLY', 'Yearly']].map(([c, label]) => (
             <button key={c} className={`btn btn-sm ${cycle === c ? 'btn-primary' : 'btn-light'}`} onClick={() => onCycle(c)}>
@@ -212,7 +236,7 @@ function ChoosePlan({ plans, loading, selected, cycle, onPlan, onCycle, onNext }
           ))
           : plans.map((p) => (
             <div className={`col-12 col-sm-6 ${plans.length > 3 ? 'col-xl-3' : 'col-xl-4'}`} key={p.code}>
-              <PricingCard plan={p} cycle={cycle === 'YEARLY' ? 'yearly' : 'monthly'}
+              <PricingCard plan={p} cycle={cycle === 'YEARLY' ? 'yearly' : 'monthly'} billingHint
                 selected={selected?.code === p.code} onSelect={onPlan} />
             </div>
           ))}
@@ -347,7 +371,7 @@ function PlanSummary({ plan, cycle }) {
   if (!plan) return null
   const yearly = cycle === 'YEARLY'
   const price = plan.price?.[yearly ? 'yearly' : 'monthly'] ?? plan.price?.monthly
-  const isFree = !Number(price)
+  const isFree = isFreePlan(plan)
 
   return (
     <div className="ob-summary">
@@ -355,7 +379,8 @@ function PlanSummary({ plan, cycle }) {
 
       <div className="d-flex align-items-center justify-content-between gap-2 mt-2">
         <span className="ob-summary__name">{plan.name}</span>
-        <span className="ob-summary__cycle">{yearly ? 'Yearly' : 'Monthly'}</span>
+        {/* No cycle on Free: "Yearly" there reads as free for a year. */}
+        {!isFree && <span className="ob-summary__cycle">{yearly ? 'Yearly' : 'Monthly'}</span>}
       </div>
 
       <div className="ob-summary__price">
@@ -378,8 +403,11 @@ function PlanSummary({ plan, cycle }) {
       <div className="ob-summary__note">
         <FiShield size={14} />
         <span>
-          {plan.trialDays > 0 ? `${plan.trialDays}-day free trial. ` : ''}
-          No card charged today.
+          {isFree
+            ? `Free${plan.trialDays > 0 ? ` — ${plan.trialDays} days` : ''}, no card needed.`
+            : plan.trialDays > 0
+              ? `${plan.trialDays}-day free trial, then billed.`
+              : 'Billed today, on a secure payment page.'}
         </span>
       </div>
     </div>
@@ -430,12 +458,16 @@ function Verify({ email, token, onVerified, onBack }) {
 }
 
 /* ── Step 4: Create password → POST /register/set-password ───── */
-function CreatePassword({ token, code, onNext, onBack }) {
+// On a free plan this is the last step: onNext also creates the account, so the
+// button says so. If the password is saved but that call fails, a retry must
+// not send the password again — the ref remembers it is already set.
+function CreatePassword({ token, code, free, onNext, onBack }) {
   const { notify } = useNotification()
   const { register, handleSubmit, watch, formState: { errors } } = useForm()
   const [show, setShow] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
+  const passwordSet = useRef(false)
   const pw = watch('password') || ''
 
   // Force the user to type the password (and confirmation) — blocking paste/copy
@@ -450,11 +482,15 @@ function CreatePassword({ token, code, onNext, onBack }) {
     if (!isStrongPassword(v.password)) return notify.warn('Password does not meet all requirements')
     setBusy(true)
     try {
-      await signupService.setPassword(token, code, v.password)
-      notify.success('Password created')
-      onNext()
-    } catch (e) { notify.error(e.message || 'Could not set password') }
-    finally { setBusy(false) }
+      if (!passwordSet.current) {
+        await signupService.setPassword(token, code, v.password)
+        passwordSet.current = true
+        if (!free) notify.success('Password created')
+      }
+      await onNext()
+    } catch (e) {
+      notify.error(e.message || (passwordSet.current ? 'Could not create your account' : 'Could not set password'))
+    } finally { setBusy(false) }
   }
 
   return (
@@ -492,7 +528,7 @@ function CreatePassword({ token, code, onNext, onBack }) {
         <div className="d-flex gap-2">
           <Button variant="light" type="button" icon={FiArrowLeft} onClick={onBack}>Back</Button>
           <Button type="submit" className="flex-grow-1 justify-content-center" loading={busy} disabled={!isStrongPassword(pw)}>
-            Continue <FiArrowRight />
+            {free ? 'Create account' : 'Continue'} <FiArrowRight />
           </Button>
         </div>
       </form>
@@ -508,15 +544,18 @@ function Payment({ plan, cycle, token, onPaid, onBack }) {
   const b = priceBreakdown(plan, cycle)
   const amount = session?.amount ?? b.total
   const currency = session?.currency ?? plan.currency
-  // Read the real trial length rather than hardcoding it — the plan catalog is
-  // editable in Plans admin, so a fixed "14-day" would drift out of date.
-  const trialLabel = plan.trialDays > 0 ? `${plan.trialDays}-day free trial` : 'free trial'
+  // Paid plans carry no trial now, but the catalog is editable in Plans admin,
+  // so read the real length rather than assume either way.
+  const trialDays = plan.trialDays > 0 ? plan.trialDays : 0
 
   const startCheckout = async () => {
     setBusy(true)
     try {
       const res = await signupService.checkout(token)
       if (res?.checkoutUrl) { window.location.assign(res.checkoutUrl); return } // real provider → redirect
+      // FREE: nothing was due and the account already exists (the plan list
+      // was stale, say). Straight to Done — mock-confirm would find no payment.
+      if (res?.mode === 'FREE') { onPaid(res); return }
       setSession(res) // mock provider → confirm button
     } catch (e) { notify.error(e.message || 'Could not start checkout') }
     finally { setBusy(false) }
@@ -534,7 +573,9 @@ function Payment({ plan, cycle, token, onPaid, onBack }) {
   return (
     <div>
       <Header title="Start your subscription"
-        sub={`${trialLabel.charAt(0).toUpperCase()}${trialLabel.slice(1)} — you won’t be charged until it ends.`} />
+        sub={trialDays
+          ? `${trialDays}-day free trial — you won’t be charged until it ends.`
+          : 'You’ll pay on a secure payment page, and your plan starts straight away.'} />
       <div className="row g-3 justify-content-center">
         <div className="col-12 col-lg-6">
           <Card title="Order summary">
@@ -543,12 +584,14 @@ function Payment({ plan, cycle, token, onPaid, onBack }) {
             {b.discount > 0 && <Row label={`Cycle discount (${b.discountPercent}%)`} value={`− ${formatCurrency(b.discount, plan.currency)}`} success />}
             <hr />
             <div className="d-flex justify-content-between align-items-center mb-1">
-              <span className="fw-bold">Due after trial</span>
+              <span className="fw-bold">{trialDays ? 'Due after trial' : 'Due today'}</span>
               <span className="h4 mb-0 fw-bold">{formatCurrency(amount, currency)}</span>
             </div>
-            <div className="text-muted mb-3" style={{ fontSize: 11 }}>
-              {formatCurrency(0, currency)} due today · {trialLabel}
-            </div>
+            {trialDays ? (
+              <div className="text-muted mb-3" style={{ fontSize: 11 }}>
+                {formatCurrency(0, currency)} due today · {trialDays}-day free trial
+              </div>
+            ) : <div className="mb-3" />}
 
             {!session ? (
               <Button className="w-100 justify-content-center py-2" icon={FiCreditCard} loading={busy} onClick={startCheckout}>
@@ -556,9 +599,9 @@ function Payment({ plan, cycle, token, onPaid, onBack }) {
               </Button>
             ) : (
               <>
-                <div className="alert alert-info py-2 small mb-3">{session.note || 'Test mode — confirm to start your trial.'}</div>
+                <div className="alert alert-info py-2 small mb-3">{session.note || 'Test mode — no real charge. Confirm to start your plan.'}</div>
                 <Button className="w-100 justify-content-center py-2" loading={busy} onClick={confirmMock}>
-                  Start free trial
+                  {trialDays ? 'Start free trial' : 'Confirm payment'}
                 </Button>
               </>
             )}
@@ -581,20 +624,27 @@ const Row = ({ label, value, success, muted }) => (
 )
 
 /* ── Step 6: Done + welcome email ────────────────────────────── */
-// Uses the final SelfRegisterResponse. The welcome email is sent server-side.
-function Done({ email, plan, result, onGo }) {
+// Uses the final SelfRegisterResponse — or, on a free plan, the checkout's
+// { mode: FREE, trialDays, note }, since that call is what created the account.
+// The welcome email is sent server-side either way.
+function Done({ email, plan, free, result, onGo }) {
   const a = result || {}
+  const days = a.trialDays ?? plan.trialDays
   const rows = [
     ['Plan', a.subscriptionPlan || plan.name],
     ['Company code', a.companyCode],
     ['Status', a.subscriptionStatus],
+    ['Free for', free && days > 0 ? `${days} days` : null],
     ['Trial ends', a.trialEndDate],
-    ['Renews', a.subscriptionEndDate],
+    ['Renews', free ? null : a.subscriptionEndDate],
   ].filter(([, v]) => v)
 
   return (
     <div className="ob-narrow">
-      <SuccessScreen title="Welcome aboard 🎉" message={`Your ${a.subscriptionPlan || plan.name} workspace is ready.`}>
+      <SuccessScreen title={free ? 'You’re all set 🎉' : 'Welcome aboard 🎉'}
+        message={free
+          ? (a.note || 'No payment needed on the Free plan — the account is ready. Sign in to start.')
+          : `Your ${a.subscriptionPlan || plan.name} workspace is ready.`}>
         <div className="d-flex justify-content-center mb-4">
           <Button icon={FiCheck} onClick={onGo}>Go to sign in</Button>
         </div>
@@ -605,7 +655,9 @@ function Done({ email, plan, result, onGo }) {
         <div className="icon-box icon-grad-success flex-shrink-0"><FiMail /></div>
         <div>
           <div className="fw-semibold">A welcome email is on its way</div>
-          <div className="text-muted small">Your receipt and login details were emailed to <strong>{email}</strong>.</div>
+          <div className="text-muted small">
+            {free ? 'Your login details were' : 'Your receipt and login details were'} emailed to <strong>{email}</strong>.
+          </div>
         </div>
       </div>
 

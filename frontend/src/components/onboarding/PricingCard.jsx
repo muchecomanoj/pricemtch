@@ -5,7 +5,9 @@ import { formatCurrency } from '../../utils/format'
 const ICONS = { rocket: FiCloud, zap: FiZap, briefcase: FiBriefcase, shield: FiShield }
 
 // Selectable plan card with gradient icon, price, feature list and badges.
-export default function PricingCard({ plan, cycle = 'monthly', selected, onSelect, compact }) {
+// `billingHint` adds when a paid plan is charged, so nobody signing up expects
+// a trial that paid plans no longer have.
+export default function PricingCard({ plan, cycle = 'monthly', selected, onSelect, compact, billingHint }) {
   const Icon = ICONS[plan.icon] || FiZap
   const price = plan.price?.[cycle] ?? plan.price?.monthly
   const perLabel = cycle === 'yearly' ? '/year' : '/month'
@@ -47,6 +49,11 @@ export default function PricingCard({ plan, cycle = 'monthly', selected, onSelec
           </>
         )}
       </div>
+      {billingHint && !isFree && (
+        <div className="text-muted small mb-3" style={{ marginTop: -8 }}>
+          {plan.trialDays > 0 ? `${plan.trialDays}-day free trial, then billed` : 'Billed today'}
+        </div>
+      )}
 
       {/* Quotas — the live plan catalog only carries a seat cap, so anything
           the API doesn't send is omitted rather than rendered as "undefined". */}

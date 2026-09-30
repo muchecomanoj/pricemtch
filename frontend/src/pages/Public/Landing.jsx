@@ -8,12 +8,22 @@ import {
 } from 'react-icons/fi'
 import { APP_NAME } from '../../constants'
 import { publicService } from '../../services/publicService'
-import { normalizePlans } from '../../utils/plans'
+import { normalizePlans, isFreePlan } from '../../utils/plans'
 import { formatCurrency } from '../../utils/format'
+import Modal from '../../components/common/Modal'
+import { DemoForm } from '../../components/public/LeadForms'
 
 // ── Marketing landing page (public, no auth) ────────────────────────────────
 // Every "start" CTA drops the visitor into the self-signup flow with the plan
 // preselected; pricing comes live from the backend catalog.
+//
+// The text comes from GET /public/landing, editable by the platform admin.
+// Two rules: a section missing from the response is simply not rendered (a
+// hidden or broken section costs one box, not the page), and if the call
+// fails or is still loading, FALLBACK_CONTENT is used so the page is never
+// half-empty. What is NOT content: the pricing cards and the trial length,
+// which both come from the plan catalog so they can't drift from what is
+// actually sold.
 
 const NAV_LINKS = [
   ['Platform', '#platform'], ['Product', '#workspace'], ['Pricing', '#pricing'], ['Resources', '#footer'],
@@ -21,58 +31,170 @@ const NAV_LINKS = [
 
 const TRUST = ['NORTHWIND', 'Vertex&Co', 'MERIDIAN', 'Corta', 'HELIOMART']
 
-const FEATURES = [
-  { icon: FiBox, grad: 'primary', title: 'Universal matching engine',
-    body: 'Match your catalog to millions of listings by ASIN, UPC, EAN or image similarity — with confidence scores you can audit.' },
-  { icon: FiSearch, grad: 'info', title: 'Real-time competitor tracking',
-    body: 'Watch every seller across Amazon, eBay, Walmart and the open web — price, stock, shipping and condition, updated continuously.' },
-  { icon: FiTrendingUp, grad: 'primary', title: 'AI pricing recommendations',
-    body: 'Confidence-scored price moves that protect margin and win the buy box — with the reasoning shown, never a black box.' },
-  { icon: FiPieChart, grad: 'success', title: 'Profitability intelligence',
-    body: 'Model COGS, fees, shipping, ads and returns to see the true net margin behind every SKU and every price change.' },
-  { icon: FiBell, grad: 'purple', title: 'Smart alerts',
-    body: 'Know the moment a rival drops price, goes out of stock, or a new seller appears — routed to the right person, instantly.' },
-  { icon: FiFileText, grad: 'info', title: 'Boardroom-ready reports',
-    body: 'Export governed, data-status-tagged reports finance can trust — every number labelled actual, calculated or estimated.' },
-]
+// Same shape as GET /public/landing, and the copy it was seeded with.
+const FALLBACK_CONTENT = {
+  HERO: {
+    badge: 'AI price monitoring · live across every marketplace',
+    title: 'Price with intelligence, not guesswork.',
+    subtitle: 'Track competitors, monitor market movements, match your catalog to millions of listings, and let AI recommend the price that protects margin and wins the buy box.',
+    primaryCta: 'Start free trial',
+    secondaryCta: 'See how it works',
+    assurances: ['No credit card required', 'SOC 2 ready'],
+  },
+  STATS: {
+    items: [
+      { value: '12M+', label: 'Listings tracked daily' },
+      { value: '3.2%', label: 'Average margin lift' },
+      { value: '45 min', label: 'Saved per analyst / day' },
+      { value: '99.9%', label: 'Platform uptime' },
+    ],
+  },
+  FEATURES: {
+    eyebrow: 'THE PLATFORM',
+    title: 'Everything you need to price competitively',
+    subtitle: 'From raw marketplace data to a boardroom-ready recommendation — one connected workflow, no spreadsheets.',
+    items: [
+      { icon: 'box', title: 'Universal matching engine',
+        description: 'Match your catalog to millions of listings by ASIN, UPC, EAN or image similarity — with confidence scores you can audit.' },
+      { icon: 'search', title: 'Real-time competitor tracking',
+        description: 'Watch every seller across Amazon, eBay, Walmart and the open web — price, stock, shipping and condition, updated continuously.' },
+      { icon: 'trend', title: 'AI pricing recommendations',
+        description: 'Confidence-scored price moves that protect margin and win the buy box — with the reasoning shown, never a black box.' },
+      { icon: 'pie', title: 'Profitability intelligence',
+        description: 'Model COGS, fees, shipping, ads and returns to see the true net margin behind every SKU and every price change.' },
+      { icon: 'bell', title: 'Smart alerts',
+        description: 'Know the moment a rival drops price, goes out of stock, or a new seller appears — routed to the right person, instantly.' },
+      { icon: 'report', title: 'Boardroom-ready reports',
+        description: 'Export governed, data-status-tagged reports finance can trust — every number labelled actual, calculated or estimated.' },
+    ],
+  },
+  HOW_IT_WORKS: {
+    eyebrow: 'HOW IT WORKS',
+    title: 'From catalog to confident pricing in three steps',
+    subtitle: 'One connected workflow — no spreadsheets, no guesswork, no black boxes.',
+    items: [
+      { step: '01', title: 'Match',
+        description: 'Import your catalog by CSV or API and auto-match every product against millions of marketplace listings.' },
+      { step: '02', title: 'Monitor',
+        description: 'Continuously track competitor prices, stock, shipping and new sellers across every marketplace you sell on.' },
+      { step: '03', title: 'Optimize',
+        description: 'Act on confidence-scored AI recommendations that defend the buy box and protect margin — with the reasoning shown.' },
+    ],
+  },
+  // The two split sections. Only the words are content; the product table and
+  // the recommendation card beside them are illustrations and stay in code.
+  ONE_WORKSPACE: {
+    eyebrow: 'ONE WORKSPACE',
+    title: 'Your whole pricing operation, in one place',
+    subtitle: 'Catalog, competitors, costs and recommendations share one source of truth — so analysts, managers and finance finally work from the same numbers.',
+    bullets: [
+      'Role-based access for admins, managers, analysts & finance',
+      'Import your catalog by CSV or API in minutes',
+      'Every number carries an auditable data-status tag',
+    ],
+    cta: 'Explore the platform',
+  },
+  AI_RECOMMENDATIONS: {
+    eyebrow: 'AI RECOMMENDATIONS',
+    title: 'AI that explains the price, not just recommends it',
+    subtitle: 'Every recommendation shows the reasoning, the confidence score and the projected margin impact — so your team can trust it and act, instead of second-guessing a black box.',
+    bullets: [
+      'Every move shows its reasoning and confidence score',
+      'Projected margin impact before you commit',
+      'Stays inside the competitive range you set',
+    ],
+    cta: 'See AI recommendations',
+  },
+  TESTIMONIALS: {
+    items: [{
+      quote: 'Price Intelligence paid for itself in six weeks. We stopped guessing on competitor moves and our pricing team finally trusts a single set of numbers.',
+      name: 'Anita Krishnan', role: 'Head of Pricing, Northwind Retail', initials: 'AK',
+    }],
+  },
+  // No FAQ copy of our own: without the API there is nothing to answer with.
+  CTA: {
+    title: 'Stop guessing. Start pricing with intelligence.',
+    subtitle: 'Set up your catalog in minutes. See competitor moves and your first AI recommendation today.',
+    primaryCta: 'Start free trial',
+    secondaryCta: 'Book a demo',
+  },
+}
 
-const STEPS = [
-  { n: '01', icon: FiSearch, grad: 'primary', title: 'Match',
-    body: 'Import your catalog by CSV or API and auto-match every product against millions of marketplace listings.' },
-  { n: '02', icon: FiActivity, grad: 'info', title: 'Monitor',
-    body: 'Continuously track competitor prices, stock, shipping and new sellers across every marketplace you sell on.' },
-  { n: '03', icon: FiTarget, grad: 'success', title: 'Optimize',
-    body: 'Act on confidence-scored AI recommendations that defend the buy box and protect margin — with the reasoning shown.' },
+// The API names icons by slug; an unknown one gets a generic mark.
+const ICONS = { box: FiBox, search: FiSearch, trend: FiTrendingUp, pie: FiPieChart, bell: FiBell, report: FiFileText }
+const iconFor = (slug) => ICONS[slug] || FiZap
+// Colour is presentation, not content: by position, cycling if items are added.
+const FEATURE_GRADS = ['primary', 'info', 'primary', 'success', 'purple', 'info']
+const STEP_STYLE = [
+  { icon: FiSearch, grad: 'primary' }, { icon: FiActivity, grad: 'info' }, { icon: FiTarget, grad: 'success' },
 ]
+const list = (section) => (Array.isArray(section?.items) ? section.items : [])
 
-const WORKSPACE_POINTS = [
-  'Role-based access for admins, managers, analysts & finance',
-  'Import your catalog by CSV or API in minutes',
-  'Every number carries an auditable data-status tag',
-]
+// A two-line heading. An explicit "\n" in the text decides the break;
+// otherwise it goes at the space nearest the middle, which is where the
+// hand-set <br /> sat in both split-section titles.
+function TwoLineTitle({ text = '' }) {
+  let lines = text.split('\n')
+  if (lines.length === 1 && text.length > 24) {
+    const mid = text.length / 2
+    let cut = -1
+    for (let i = text.indexOf(' '); i >= 0; i = text.indexOf(' ', i + 1)) {
+      if (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid)) cut = i
+    }
+    if (cut > 0) lines = [text.slice(0, cut), text.slice(cut + 1)]
+  }
+  return <h2 className="lp-h2">{lines.map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}</h2>
+}
 
-const AI_POINTS = [
-  'Every move shows its reasoning and confidence score',
-  'Projected margin impact before you commit',
-  'Stays inside the competitive range you set',
-]
+// The words half of a split section.
+function SplitCopy({ eyebrow, title, subtitle, bullets, children }) {
+  return (
+    <>
+      {eyebrow && <span className="lp-eyebrow">{eyebrow}</span>}
+      {title && <TwoLineTitle text={title} />}
+      {subtitle && <p className="lp-section-sub" style={{ margin: '0 0 1.6rem' }}>{subtitle}</p>}
+      {Array.isArray(bullets) && bullets.length > 0 && (
+        <ul className="lp-checklist">{bullets.map((p, i) => <li key={`${i}-${p}`}><FiCheck /> {p}</li>)}</ul>
+      )}
+      {children}
+    </>
+  )
+}
 
-const STATS = [
-  { value: 12, suffix: 'M+', decimals: 0, label: 'Listings tracked daily' },
-  { value: 3.2, suffix: '%', decimals: 1, label: 'Average margin lift' },
-  { value: 45, suffix: ' min', decimals: 0, label: 'Saved per analyst / day' },
-  { value: 99.9, suffix: '%', decimals: 1, label: 'Platform uptime' },
-]
+// "12M+" → counts up to 12 then shows "M+"; "45 min" → 45 then " min". A
+// value that doesn't start with a number is shown as written, unanimated.
+function parseStat(value) {
+  const m = /^(\d+(?:\.\d+)?)(.*)$/.exec(String(value ?? '').trim())
+  if (!m) return { text: String(value ?? '') }
+  return { value: parseFloat(m[1]), decimals: (m[1].split('.')[1] || '').length, suffix: m[2] }
+}
+
+// "Price with intelligence, not guesswork." is set as three lines with the
+// clause after the last comma in the gradient. Any title with a comma gets
+// the same treatment; one without is shown plain.
+function HeroTitle({ title = '' }) {
+  const cut = title.lastIndexOf(',')
+  if (cut < 0) return <h1 className="lp-h1">{title}</h1>
+  const lead = title.slice(0, cut + 1).trim().split(/\s+/)
+  const tail = title.slice(cut + 1).trim()
+  const last = lead.pop()
+  return (
+    <h1 className="lp-h1">
+      {lead.length > 0 && <>{lead.join(' ')}<br /></>}{last}<br /><span className="lp-grad-text">{tail}</span>
+    </h1>
+  )
+}
 
 // Pricing grid — the exact same catalog the signup flow shows.
 function pricingTiers(plans) {
   return plans.map((p) => {
-    const isFree = p.code === 'FREE' || p.price.monthly === 0
+    const isFree = p.code === 'FREE' || isFreePlan(p)
     return {
       code: p.code, name: p.name, tagline: p.tagline,
       price: isFree ? 'Free' : formatCurrency(p.price.monthly, p.currency),
       unit: isFree ? '' : '/mo',
-      cta: isFree ? 'Start free trial' : 'Start free',
+      // Paid plans are billed from day one — only Free is a trial.
+      cta: isFree ? 'Start free trial' : 'Get started',
       to: `/signup?plan=${p.code}`,
       highlight: p.recommended,
       points: [p.users ? `Up to ${p.users.toLocaleString()} seats` : null, ...p.features].filter(Boolean),
@@ -87,13 +209,29 @@ const rise = {
 
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [demoOpen, setDemoOpen] = useState(false)
   const plansQuery = useQuery({
     queryKey: ['public', 'plans'],
     queryFn: publicService.plans,
     staleTime: 5 * 60 * 1000,
   })
-  const tiers = pricingTiers(normalizePlans(plansQuery.data))
+  const landingQuery = useQuery({
+    queryKey: ['public', 'landing'],
+    queryFn: publicService.landing,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,   // a marketing page shouldn't sit on retries; the fallback is fine
+  })
+  const content = landingQuery.data ?? FALLBACK_CONTENT
+  const { HERO: hero, STATS: stats, FEATURES: features, HOW_IT_WORKS: how,
+    ONE_WORKSPACE: workspace, AI_RECOMMENDATIONS: ai,
+    TESTIMONIALS: testimonials, FAQS: faqs, CTA: cta } = content
+  const plans = normalizePlans(plansQuery.data)
+  const tiers = pricingTiers(plans)
   const closeMenu = () => setMenuOpen(false)
+  // "Start free trial" must open sign-up on the free plan: bare /signup
+  // preselects Professional, which is paid from day one.
+  const freePlan = plans.find(isFreePlan)
+  const trialTo = freePlan ? `/signup?plan=${freePlan.code}` : '/signup'
 
   return (
     <div className="lp">
@@ -109,7 +247,7 @@ export default function Landing() {
           </nav>
           <div className="lp-nav-cta">
             <Link to="/login" className="lp-btn lp-btn-ghost">Sign in</Link>
-            <Link to="/signup" className="lp-btn lp-btn-primary">Start free trial</Link>
+            <Link to={trialTo} className="lp-btn lp-btn-primary">Start free trial</Link>
           </div>
           <button className="lp-nav-toggle" aria-label="Toggle menu" aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}>{menuOpen ? <FiX /> : <FiMenu />}</button>
@@ -118,37 +256,35 @@ export default function Landing() {
           <div className="lp-mobile-drawer">
             {NAV_LINKS.map(([label, href]) => <a key={label} href={href} onClick={closeMenu}>{label}</a>)}
             <Link to="/login" className="lp-btn lp-btn-outline w-100" onClick={closeMenu}>Sign in</Link>
-            <Link to="/signup" className="lp-btn lp-btn-primary w-100" onClick={closeMenu}>Start free trial</Link>
+            <Link to={trialTo} className="lp-btn lp-btn-primary w-100" onClick={closeMenu}>Start free trial</Link>
           </div>
         )}
       </header>
 
       {/* ── Hero ──────────────────────────────────────────── */}
-      <section className="lp-hero" id="top">
-        <div className="lp-hero-glow" />
-        <div className="lp-container lp-hero-grid">
-          <motion.div initial="hidden" animate="show" variants={rise} className="lp-hero-copy">
-            <span className="lp-eyebrow-pill"><span className="lp-dot" /> AI price monitoring · live across every marketplace</span>
-            <h1 className="lp-h1">Price with<br />intelligence,<br /><span className="lp-grad-text">not guesswork.</span></h1>
-            <p className="lp-lead">
-              Track competitors, monitor market movements, match your catalog to millions of listings, and let AI
-              recommend the price that protects margin and wins the buy box.
-            </p>
-            <div className="lp-hero-actions">
-              <Link to="/signup" className="lp-btn lp-btn-primary lp-btn-lg">Start free trial <FiArrowRight /></Link>
-              <a href="#workflow" className="lp-btn lp-btn-outline lp-btn-lg"><FiPlay /> See how it works</a>
-            </div>
-            <div className="lp-hero-ticks">
-              <span><FiCheck /> No credit card required</span>
-              <span><FiCheck /> 14-day full access</span>
-              <span><FiCheck /> SOC 2 ready</span>
-            </div>
-          </motion.div>
-          <motion.div initial="hidden" animate="show" variants={rise} custom={1.4} className="lp-hero-visual">
-            <HeroDashboard />
-          </motion.div>
-        </div>
-      </section>
+      {/* The id stays on a section either way: the brand and footer links jump to #top. */}
+      {hero ? (
+        <section className="lp-hero" id="top">
+          <div className="lp-hero-glow" />
+          <div className="lp-container lp-hero-grid">
+            <motion.div initial="hidden" animate="show" variants={rise} className="lp-hero-copy">
+              {hero.badge && <span className="lp-eyebrow-pill"><span className="lp-dot" /> {hero.badge}</span>}
+              <HeroTitle title={hero.title} />
+              {hero.subtitle && <p className="lp-lead">{hero.subtitle}</p>}
+              <div className="lp-hero-actions">
+                <Link to={trialTo} className="lp-btn lp-btn-primary lp-btn-lg">{hero.primaryCta || 'Start free trial'} <FiArrowRight /></Link>
+                {hero.secondaryCta && <a href="#workflow" className="lp-btn lp-btn-outline lp-btn-lg"><FiPlay /> {hero.secondaryCta}</a>}
+              </div>
+              <div className="lp-hero-ticks">
+                {heroTicks(hero.assurances, freePlan).map((t) => <span key={t}><FiCheck /> {t}</span>)}
+              </div>
+            </motion.div>
+            <motion.div initial="hidden" animate="show" variants={rise} custom={1.4} className="lp-hero-visual">
+              <HeroDashboard />
+            </motion.div>
+          </div>
+        </section>
+      ) : <span id="top" />}
 
       {/* ── Trust strip ───────────────────────────────────── */}
       <div className="lp-trust">
@@ -159,102 +295,105 @@ export default function Landing() {
       </div>
 
       {/* ── Features ──────────────────────────────────────── */}
-      <section className="lp-section" id="platform">
-        <div className="lp-container">
-          <SectionHead eyebrow="THE PLATFORM" title="Everything you need to price competitively"
-            sub="From raw marketplace data to a boardroom-ready recommendation — one connected workflow, no spreadsheets." />
-          <div className="lp-feature-grid">
-            {FEATURES.map((f, i) => (
-              <motion.div key={f.title} className="lp-feature-card"
-                initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} variants={rise} custom={i % 3}>
-                <div className={`lp-feat-icon grad-${f.grad}`}><f.icon /></div>
-                <h3>{f.title}</h3>
-                <p>{f.body}</p>
-                <a className="lp-feat-more" href="#workspace">Learn more <FiArrowRight size={13} /></a>
-              </motion.div>
-            ))}
+      {features && (
+        <section className="lp-section" id="platform">
+          <div className="lp-container">
+            <SectionHead eyebrow={features.eyebrow} title={features.title} sub={features.subtitle} />
+            <div className="lp-feature-grid">
+              {list(features).map((f, i) => {
+                const Icon = iconFor(f.icon)
+                return (
+                  <motion.div key={`${i}-${f.title}`} className="lp-feature-card"
+                    initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }} variants={rise} custom={i % 3}>
+                    <div className={`lp-feat-icon grad-${FEATURE_GRADS[i % FEATURE_GRADS.length]}`}><Icon /></div>
+                    <h3>{f.title}</h3>
+                    <p>{f.description}</p>
+                    <a className="lp-feat-more" href="#workspace">Learn more <FiArrowRight size={13} /></a>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── Workflow (3 steps) ────────────────────────────── */}
-      <section className="lp-section lp-workflow" id="workflow">
-        <div className="lp-container">
-          <SectionHead eyebrow="HOW IT WORKS" center title="From catalog to confident pricing in three steps"
-            sub="One connected workflow — no spreadsheets, no guesswork, no black boxes." />
-          <div className="lp-steps">
-            {STEPS.map((s, i) => (
-              <motion.div className="lp-step" key={s.n}
-                initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={i}>
-                <div className="lp-step-num">{s.n}</div>
-                <div className={`lp-step-icon grad-${s.grad}`}><s.icon /></div>
-                <h3>{s.title}</h3>
-                <p>{s.body}</p>
-              </motion.div>
-            ))}
+      {how && (
+        <section className="lp-section lp-workflow" id="workflow">
+          <div className="lp-container">
+            <SectionHead eyebrow={how.eyebrow} center title={how.title} sub={how.subtitle} />
+            <div className="lp-steps">
+              {list(how).map((s, i) => {
+                const style = STEP_STYLE[i % STEP_STYLE.length]
+                return (
+                  <motion.div className="lp-step" key={`${i}-${s.title}`}
+                    initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={i}>
+                    <div className="lp-step-num">{s.step || String(i + 1).padStart(2, '0')}</div>
+                    <div className={`lp-step-icon grad-${style.grad}`}><style.icon /></div>
+                    <h3>{s.title}</h3>
+                    <p>{s.description}</p>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── Product showcase (workspace) ──────────────────── */}
-      <section className="lp-section lp-workspace" id="workspace">
-        <div className="lp-container lp-split">
-          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise}>
-            <span className="lp-eyebrow">ONE WORKSPACE</span>
-            <h2 className="lp-h2">Your whole pricing<br />operation, in one place</h2>
-            <p className="lp-section-sub" style={{ margin: '0 0 1.6rem' }}>
-              Catalog, competitors, costs and recommendations share one source of truth — so
-              analysts, managers and finance finally work from the same numbers.
-            </p>
-            <ul className="lp-checklist">{WORKSPACE_POINTS.map((p) => <li key={p}><FiCheck /> {p}</li>)}</ul>
-            <Link to="/signup" className="lp-btn lp-btn-dark lp-btn-lg">Explore the platform <FiArrowRight /></Link>
-          </motion.div>
-          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={1}>
-            <ProductsTable />
-          </motion.div>
-        </div>
-      </section>
+      {workspace && (
+        <section className="lp-section lp-workspace" id="workspace">
+          <div className="lp-container lp-split">
+            <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise}>
+              <SplitCopy {...workspace}>
+                {workspace.cta && <Link to="/signup" className="lp-btn lp-btn-dark lp-btn-lg">{workspace.cta} <FiArrowRight /></Link>}
+              </SplitCopy>
+            </motion.div>
+            <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={1}>
+              <ProductsTable />
+            </motion.div>
+          </div>
+        </section>
+      )}
 
       {/* ── Stats band (animated counters) ────────────────── */}
-      <div className="lp-stats">
-        <div className="lp-container lp-stats-grid">
-          {STATS.map((s) => <StatCounter key={s.label} {...s} />)}
-        </div>
-      </div>
-
-      {/* ── AI Intelligence ───────────────────────────────── */}
-      <section className="lp-section lp-ai" id="ai">
-        <div className="lp-container lp-split">
-          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={1}>
-            <AIRecommendation />
-          </motion.div>
-          <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise}>
-            <span className="lp-eyebrow">AI RECOMMENDATIONS</span>
-            <h2 className="lp-h2">AI that explains the price,<br />not just recommends it</h2>
-            <p className="lp-section-sub" style={{ margin: '0 0 1.6rem' }}>
-              Every recommendation shows the reasoning, the confidence score and the projected margin
-              impact — so your team can trust it and act, instead of second-guessing a black box.
-            </p>
-            <ul className="lp-checklist">{AI_POINTS.map((p) => <li key={p}><FiCheck /> {p}</li>)}</ul>
-            <a href="#pricing" className="lp-btn lp-btn-dark lp-btn-lg">See AI recommendations <FiArrowRight /></a>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── Testimonial ───────────────────────────────────── */}
-      <section className="lp-section lp-quote-wrap">
-        <div className="lp-container lp-quote">
-          <div className="lp-quote-mark">“</div>
-          <blockquote>
-            Price Intelligence paid for itself in six weeks. We stopped guessing on competitor
-            moves and our pricing team finally trusts a single set of numbers.
-          </blockquote>
-          <div className="lp-quote-author">
-            <span className="lp-avatar">AK</span>
-            <div><div className="lp-qa-name">Anita Krishnan</div><div className="lp-qa-role">Head of Pricing, Northwind Retail</div></div>
+      {stats && (
+        <div className="lp-stats">
+          <div className="lp-container lp-stats-grid">
+            {list(stats).map((s, i) => <StatCounter key={`${i}-${s.label}`} {...parseStat(s.value)} label={s.label} />)}
           </div>
         </div>
-      </section>
+      )}
+
+      {/* ── AI Intelligence ───────────────────────────────── */}
+      {ai && (
+        <section className="lp-section lp-ai" id="ai">
+          <div className="lp-container lp-split">
+            <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise} custom={1}>
+              <AIRecommendation />
+            </motion.div>
+            <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.4 }} variants={rise}>
+              <SplitCopy {...ai}>
+                {ai.cta && <a href="#pricing" className="lp-btn lp-btn-dark lp-btn-lg">{ai.cta} <FiArrowRight /></a>}
+              </SplitCopy>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Testimonials ──────────────────────────────────── */}
+      {list(testimonials).map((t, i) => (
+        <section className="lp-section lp-quote-wrap" key={`${i}-${t.name}`}>
+          <div className="lp-container lp-quote">
+            <div className="lp-quote-mark">“</div>
+            <blockquote>{t.quote}</blockquote>
+            <div className="lp-quote-author">
+              <span className="lp-avatar">{t.initials || initialsOf(t.name)}</span>
+              <div><div className="lp-qa-name">{t.name}</div>{t.role && <div className="lp-qa-role">{t.role}</div>}</div>
+            </div>
+          </div>
+        </section>
+      ))}
 
       {/* ── Pricing ───────────────────────────────────────── */}
       <section className="lp-section" id="pricing">
@@ -276,19 +415,48 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── CTA band ──────────────────────────────────────── */}
-      <section className="lp-section">
-        <div className="lp-container">
-          <div className="lp-cta">
-            <h2>Stop guessing. Start pricing with intelligence.</h2>
-            <p>Set up your catalog in minutes. See competitor moves and your first AI recommendation today.</p>
-            <div className="lp-cta-actions">
-              <Link to="/signup" className="lp-btn lp-btn-lg lp-btn-white">Start free trial</Link>
-              <Link to="/pricing" className="lp-btn lp-btn-lg lp-btn-glass">Book a demo</Link>
+      {/* ── FAQ ───────────────────────────────────────────── */}
+      {list(faqs).length > 0 && (
+        <section className="lp-section" id="faq">
+          <div className="lp-container">
+            <SectionHead eyebrow={faqs.eyebrow} center title={faqs.title} sub={faqs.subtitle} />
+            <div className="lp-faq">
+              {list(faqs).map((f, i) => (
+                <details key={`${i}-${f.question}`} className="lp-faq-item">
+                  <summary>{f.question}</summary>
+                  <p>{f.answer}</p>
+                </details>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* ── CTA band ──────────────────────────────────────── */}
+      {cta && (
+        <section className="lp-section">
+          <div className="lp-container">
+            <div className="lp-cta">
+              <h2>{cta.title}</h2>
+              {cta.subtitle && <p>{cta.subtitle}</p>}
+              <div className="lp-cta-actions">
+                <Link to={trialTo} className="lp-btn lp-btn-lg lp-btn-white">{cta.primaryCta || 'Start free trial'}</Link>
+                {/* Used to link to /pricing, which is this page — so it did nothing. */}
+                {cta.secondaryCta && (
+                  <button type="button" className="lp-btn lp-btn-lg lp-btn-glass" onClick={() => setDemoOpen(true)}>
+                    {cta.secondaryCta}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <Modal show={demoOpen} title="Book a demo" onClose={() => setDemoOpen(false)}>
+        <p className="text-muted small">Tell us a little about you and we’ll be in touch to set up a walkthrough.</p>
+        <DemoForm submitLabel="Book a demo" />
+      </Modal>
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="lp-footer" id="footer">
@@ -310,12 +478,26 @@ export default function Landing() {
 }
 
 // ── Building blocks ─────────────────────────────────────────────────────────
+
+// The reassurances under the hero buttons. The trial length is deliberately
+// not among them: it is read from the Free plan, second in line, so it can't
+// promise a trial the catalog no longer offers.
+function heroTicks(assurances, freePlan) {
+  const given = Array.isArray(assurances) ? assurances.filter(Boolean) : []
+  const trial = freePlan?.trialDays > 0 ? `${freePlan.trialDays} days free` : freePlan ? 'Free plan available' : null
+  return [...given.slice(0, 1), trial, ...given.slice(1)].filter(Boolean)
+}
+
+function initialsOf(name = '') {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
+}
+
 function SectionHead({ eyebrow, title, sub, center }) {
   return (
     <div className={`lp-section-head ${center ? 'is-center' : ''}`}>
-      <span className="lp-eyebrow">{eyebrow}</span>
-      <h2 className="lp-h2">{title}</h2>
-      <p className="lp-section-sub">{sub}</p>
+      {eyebrow && <span className="lp-eyebrow">{eyebrow}</span>}
+      {title && <h2 className="lp-h2">{title}</h2>}
+      {sub && <p className="lp-section-sub">{sub}</p>}
     </div>
   )
 }
@@ -329,13 +511,14 @@ function FooterCol({ title, links }) {
   )
 }
 
-// Animated count-up that runs once when scrolled into view. Respects reduced motion.
-function StatCounter({ value, suffix = '', decimals = 0, label }) {
+// Animated count-up that runs once when scrolled into view. Respects reduced
+// motion. `text` (a value that isn't a number) is shown as written.
+function StatCounter({ value, suffix = '', decimals = 0, label, text }) {
   const ref = useRef(null)
   const inView = useInView(ref, { once: true, amount: 0.5 })
   const [val, setVal] = useState(0)
   useEffect(() => {
-    if (!inView) return
+    if (!inView || text != null) return
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setVal(value); return }
     let raf
     const start = performance.now()
@@ -347,11 +530,11 @@ function StatCounter({ value, suffix = '', decimals = 0, label }) {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [inView, value, decimals])
+  }, [inView, value, decimals, text])
   const shown = val.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
   return (
     <div className="lp-stat" ref={ref}>
-      <div className="lp-stat-n">{shown}{suffix}</div>
+      <div className="lp-stat-n">{text ?? <>{shown}{suffix}</>}</div>
       <div className="lp-stat-l">{label}</div>
     </div>
   )

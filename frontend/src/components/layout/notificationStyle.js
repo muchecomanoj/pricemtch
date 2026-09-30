@@ -1,6 +1,6 @@
 import {
   FiBell, FiInfo, FiArrowUpCircle, FiArrowDownCircle, FiClock,
-  FiAlertCircle, FiCheckCircle, FiUserCheck, FiAlertTriangle,
+  FiAlertCircle, FiCheckCircle, FiUserCheck, FiAlertTriangle, FiInbox,
 } from 'react-icons/fi'
 
 // Shared by the bell dropdown and the full Notifications page, so one
@@ -18,6 +18,9 @@ export const TYPE_STYLE = {
   ACCOUNT_ACTIVATED:        { icon: FiUserCheck, cls: 'text-success', bg: 'rgba(16,185,129,0.14)' },
   // Fired by the hourly alert-rule engine; links to the product that tripped.
   ALERT_TRIGGERED:          { icon: FiAlertTriangle, cls: 'text-danger', bg: 'rgba(239,68,68,0.14)' },
+  // A demo request or contact message from the public site (super admins);
+  // links to that tab of Submissions.
+  LEAD_RECEIVED:            { icon: FiInbox, cls: 'text-info', bg: 'rgba(14,165,233,0.14)' },
   GENERAL:                  { icon: FiBell, cls: 'text-secondary', bg: 'rgba(148,163,184,0.18)' },
 }
 
