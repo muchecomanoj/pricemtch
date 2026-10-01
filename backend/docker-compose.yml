@@ -1,5 +1,7 @@
+name: pricematch
+
 services:
-  dtcpicking-backend:
+  pricematch-backend:
     image: backend-pricematch:latest
     container_name: backend-pricematch
     ports:
