@@ -1,5 +1,6 @@
+name: pricematch-frontend
 services:
-  compliance-frontend:
+  pricematch-frontend:
     build:
       context: .
       dockerfile: Dockerfile
