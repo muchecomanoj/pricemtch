@@ -21,7 +21,7 @@ import { ADMIN_STEPS, CLIENT_NEXT_STEPS, INDUSTRIES, CURRENCIES } from '../../mo
 import { TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
 import { generateCompanyCode } from '../../utils/format'
 import { publicService } from '../../services/publicService'
-import { normalizePlans, catalogDiscountPercent } from '../../utils/plans'
+import { normalizePlans, catalogDiscountPercent, isFreePlan } from '../../utils/plans'
 
 // Super-admin side of onboarding: Steps 1–3.
 const SCREENS = [
@@ -291,16 +291,24 @@ function AssignPlan({ planCode, onSelect, cycle, onCycle, plans, loading, client
   // PricingCard wants monthly | yearly.
   const cardCycle = cycle === 'YEARLY' ? 'yearly' : 'monthly'
   const yearlyDiscount = catalogDiscountPercent(plans)
+  // Free has no billing cycle — its trial is the whole period — so there is
+  // no cycle to choose. Hidden, not removed, so the header doesn't jump.
+  const selected = plans.find((p) => p.code === planCode)
+  const free = !!selected && isFreePlan(selected)
   return (
     <div>
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <div>
           <h3 className="fw-bold mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>Assign a subscription plan</h3>
-          <p className="text-muted mb-0">Choose the plan and billing cycle for <strong>{client.companyName}</strong>. This is what they&apos;ll see when they activate.</p>
+          <p className="text-muted mb-0">
+            {free
+              ? <>The Free plan for <strong>{client.companyName}</strong>: a trial with no billing, nothing to pay when they activate.</>
+              : <>Choose the plan and billing cycle for <strong>{client.companyName}</strong>. This is what they&apos;ll see when they activate.</>}
+          </p>
         </div>
         {/* Monthly / Yearly toggle — the chosen cycle is sent to the client.
             The Save X% badge reflects the real backend discount, if any. */}
-        <div className="btn-group">
+        <div className="btn-group" style={{ visibility: !loading && free ? 'hidden' : 'visible' }}>
           {[['MONTHLY', 'Monthly'], ['YEARLY', 'Yearly']].map(([c, label]) => (
             <button key={c} className={`btn btn-sm ${cycle === c ? 'btn-primary' : 'btn-light'}`}
               onClick={() => onCycle(c)}>

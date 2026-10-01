@@ -19,6 +19,7 @@ import { useNotification } from '../../context/NotificationContext'
 import { daysUntil } from '../../utils/format'
 import { planPeriodLabel } from '../../utils/plans'
 import { PAGE_SIZE, TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
+import { appUrl } from '../../utils/appPath'
 
 // Deterministic gradient avatar per company, so rows are easier to scan.
 const AVATAR_GRADS = [
@@ -105,7 +106,7 @@ export default function ClientsAdmin() {
       // New client — a welcome email is sent so they set their own password + plan.
       const email = vars.adminEmail || data?.companyEmail || ''
       const token = btoa(`${data?.id || email}:${email}`).replace(/=+$/, '')
-      setWelcome({ email, link: `${window.location.origin}/activate?token=${token}` })
+      setWelcome({ email, link: appUrl(`/activate?token=${token}`) })
       notify.success('Client created — welcome email sent')
     },
     onError: (e) => notify.error(e.message || 'Save failed'),

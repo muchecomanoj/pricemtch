@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ENDPOINTS } from './apiEndpoints'
 import { mockResponse } from '../mock/mockHelper'
 import { mockInvitation } from '../mock/onboarding'
+import { appUrl } from '../utils/appPath'
 
 // ---------------------------------------------------------------------------
 // Client onboarding via a secure invitation link. Aligned to the live contract:
@@ -99,11 +100,10 @@ export const onboardingService = {
     if (!ONBOARDING_LIVE) {
       return (await mockResponse({ mode: 'MOCK', checkoutUrl: null, sessionId: 'mock-session', note: 'Demo checkout — no real charge' }, 900)).data
     }
-    const origin = window.location.origin
     const { data } = await publicApi.post(ENDPOINTS.onboarding.checkout, {
       token,
-      successUrl: successUrl || `${origin}/activate?token=${token}&paid=1`,
-      cancelUrl: cancelUrl || `${origin}/activate?token=${token}`,
+      successUrl: successUrl || appUrl(`/activate?token=${token}&paid=1`),
+      cancelUrl: cancelUrl || appUrl(`/activate?token=${token}`),
     })
     return data
   },

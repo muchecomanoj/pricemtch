@@ -27,7 +27,7 @@ import { TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
 import { formatCurrency } from '../../utils/format'
 import { publicService } from '../../services/publicService'
 import { usePaymentConfirm } from '../../hooks/usePaymentConfirm'
-import { normalizePlans, catalogDiscountPercent } from '../../utils/plans'
+import { normalizePlans, catalogDiscountPercent, isFreePlan } from '../../utils/plans'
 
 // The activation payload names the assigned plan/cycle differently depending on
 // backend version, so accept any of these rather than silently falling back.
@@ -41,15 +41,19 @@ const readAssignedCycle = (inv) =>
 // (The admin's create/plan/invite steps are deliberately not shown here — the
 // client didn't perform them.)
 const SCREENS = [
-  { key: 'welcome', rail: 0 },
-  { key: 'otp', rail: 0 },
-  { key: 'password', rail: 1 },
-  { key: 'profile', rail: 2 },
-  { key: 'review', rail: 3 },
-  { key: 'billing', rail: 4 },
-  { key: 'payment', rail: 5 },
-  { key: 'done', rail: 6 },
+  { key: 'welcome', step: 'verified' },
+  { key: 'otp', step: 'verified' },
+  { key: 'password', step: 'password' },
+  { key: 'profile', step: 'profile' },
+  { key: 'review', step: 'review' },
+  { key: 'billing', step: 'billing' },
+  { key: 'payment', step: 'payment' },
+  { key: 'done', step: 'active' },
 ]
+// A free plan has no billing cycle and nothing to pay: Review Plan activates
+// the workspace directly, so those two steps aren't shown — the same as
+// self sign-up on Free.
+const FREE_STEPS = CLIENT_STEPS.filter((s) => !['billing', 'payment'].includes(s.key))
 
 export default function ClientOnboarding() {
   const [params] = useSearchParams()
@@ -115,6 +119,9 @@ export default function ClientOnboarding() {
   // plan, or the client is shown (and charged for) something else entirely.
   const plan = plans.find((p) => p.code === data.planCode) || null
   const current = SCREENS[screen]
+  const free = !!plan && isFreePlan(plan)
+  const steps = free ? FREE_STEPS : CLIENT_STEPS
+  const goTo = (key) => setScreen(SCREENS.findIndex((s) => s.key === key))
   // Short, card-sized steps — centred rather than pinned to the top.
   const isNarrow = ['welcome', 'otp', 'password'].includes(current.key)
 
@@ -125,8 +132,8 @@ export default function ClientOnboarding() {
   return (
     <div className="ob-shell">
       <OnboardingStepper
-        steps={CLIENT_STEPS}
-        currentIndex={current.rail}
+        steps={steps}
+        currentIndex={Math.max(0, steps.findIndex((s) => s.key === current.step))}
         completed={current.key === 'done'}
         title="Set up your workspace"
         subtitle={invite.companyName}
@@ -164,10 +171,12 @@ export default function ClientOnboarding() {
                   onSave={(p) => { patch({ profile: p }); next() }} onBack={back} />
               )}
               {current.key === 'review' && (
-                <ReviewPlan plan={plan} plans={plans} cycle={data.cycle}
+                <ReviewPlan plan={plan} plans={plans} cycle={data.cycle} token={token}
                   onChangePlan={(c) => patch({ planCode: c })}
                   onChangeCycle={(c) => patch({ cycle: c })}
-                  onNext={next} onBack={back} />
+                  onNext={next} onBack={back}
+                  onActivated={(activation) => { patch({ activation }); goTo('done') }}
+                  onNeedsPayment={() => goTo('billing')} />
               )}
               {current.key === 'billing' && (
                 <ChooseBilling plan={plan} value={data.cycle} token={token}
@@ -179,8 +188,8 @@ export default function ClientOnboarding() {
                   onPaid={(activation) => { patch({ activation }); next() }} onBack={back} />
               )}
               {current.key === 'done' && (
-                <Activated activation={data.activation} plan={plan} cycle={data.cycle}
-                  onGo={() => goToLogin(data.activation?.loginUrl)} />
+                <Activated activation={data.activation} plan={plan} cycle={data.cycle} free={free}
+                  email={invite.email} onGo={() => goToLogin(data.activation?.loginUrl)} />
               )}
               </>)}
             </motion.div>
@@ -484,12 +493,30 @@ const Header = ({ title, sub }) => (
 )
 
 /* ── Step 8: Review plan ─────────────────────────────────────── */
-function ReviewPlan({ plan, plans, cycle, onChangePlan, onChangeCycle, onNext, onBack }) {
+function ReviewPlan({ plan, plans, cycle, token, onChangePlan, onChangeCycle, onNext, onBack, onActivated, onNeedsPayment }) {
+  const { notify } = useNotification()
   // With no assigned plan resolved, open straight into the picker — showing an
   // arbitrary plan as "assigned to your organization" would be a lie.
   const [choosing, setChoosing] = useState(!plan)
+  const [busy, setBusy] = useState(false)
   const cardCycle = cycle === 'YEARLY' ? 'yearly' : 'monthly'
   const yearlyDiscount = catalogDiscountPercent(plans)
+  const free = !!plan && isFreePlan(plan)
+
+  // Free: confirm the plan, then call checkout — on a free plan that is what
+  // activates the workspace (the backend answers mode FREE, nothing to pay).
+  // Should the server still want payment (the plan list here was out of
+  // date), carry on through the normal billing steps instead.
+  const activateFree = async () => {
+    setBusy(true)
+    try {
+      await onboardingService.choosePlan(token, plan.code, cycle)
+      const res = await onboardingService.checkout(token)
+      if (res?.mode === 'FREE') onActivated(res)
+      else onNeedsPayment()
+    } catch (e) { notify.error(e.message || 'Could not activate your workspace') }
+    finally { setBusy(false) }
+  }
   return (
     <div>
       <Header
@@ -533,8 +560,10 @@ function ReviewPlan({ plan, plans, cycle, onChangePlan, onChangeCycle, onNext, o
         <>
           <SubscriptionSummary plan={plan} cycleCode={cycle} onChangePlan={() => setChoosing(true)} />
           <div className="d-flex justify-content-between mt-3">
-            <Button variant="light" icon={FiArrowLeft} onClick={onBack}>Back</Button>
-            <Button onClick={onNext}>Choose billing <FiArrowRight /></Button>
+            <Button variant="light" icon={FiArrowLeft} onClick={onBack} disabled={busy}>Back</Button>
+            {free
+              ? <Button loading={busy} onClick={activateFree}>Activate workspace <FiArrowRight /></Button>
+              : <Button onClick={onNext}>Choose billing <FiArrowRight /></Button>}
           </div>
         </>
       )}
@@ -682,23 +711,33 @@ const Row = ({ label, value, success, muted }) => (
 /* ── Step 11/12: Activated ───────────────────────────────────── */
 // Uses ActivationCompleteResponse. The welcome/receipt email is sent
 // server-side after payment, so there's no client email call here.
-function Activated({ activation, plan, cycle, onGo }) {
+// On a free plan `activation` is the checkout's { mode: FREE, trialDays, note }
+// — that call is what activated it — so there is no cycle, renewal or receipt.
+function Activated({ activation, plan, cycle, free, email, onGo }) {
   const a = activation || {}
   const cyc = BILLING_CYCLES.find((c) => c.code === cycle)?.label || cycle
-  const rows = [
+  const days = a.trialDays ?? plan?.trialDays
+  const rows = free ? [
+    ['Plan', a.subscriptionPlan || plan?.name],
+    ['Free for', days > 0 ? `${days} days` : null],
+    ['Trial ends', a.trialEndDate],
+  ] : [
     ['Plan', a.subscriptionPlan || plan?.name],
     ['Billing cycle', a.billingCycle || cyc],
     ['Status', a.subscriptionStatus || 'ACTIVE'],
     ['Starts', a.subscriptionStartDate],
     ['Renews', a.subscriptionEndDate],
     ['Trial ends', a.trialEndDate],
-  ].filter(([, v]) => v)
+  ]
+  const shown = rows.filter(([, v]) => v)
 
   return (
     <div>
       <SuccessScreen
-        title="Subscription activated 🎉"
-        message={`Your ${a.subscriptionPlan || plan?.name} plan is live. Welcome to Price Intelligence!`}
+        title={free ? 'You’re all set 🎉' : 'Subscription activated 🎉'}
+        message={free
+          ? (a.note || `Your ${plan?.name || 'Free'} workspace is ready. Sign in to start.`)
+          : `Your ${a.subscriptionPlan || plan?.name} plan is live. Welcome to Price Intelligence!`}
       >
         <div className="d-flex justify-content-center gap-2 mb-4">
           <Button icon={FiCheck} onClick={onGo}>Go to sign in</Button>
@@ -712,15 +751,15 @@ function Activated({ activation, plan, cycle, onGo }) {
         <div>
           <div className="fw-semibold">A welcome email is on its way</div>
           <div className="text-muted small">
-            We’ve emailed your receipt and login details to <strong>{a.email}</strong>.
+            We’ve emailed your {free ? '' : 'receipt and '}login details to <strong>{a.email || email}</strong>.
           </div>
         </div>
       </div>
 
-      {rows.length > 0 && (
+      {shown.length > 0 && (
         <Card title="Subscription details" className="mt-3">
           <div className="row g-2 small">
-            {rows.map(([k, v]) => (
+            {shown.map(([k, v]) => (
               <div className="col-12 col-sm-6 d-flex justify-content-between border-bottom py-1" key={k}>
                 <span className="text-muted">{k}</span>
                 <span className="fw-semibold">{v}</span>

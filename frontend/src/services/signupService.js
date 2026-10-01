@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ENDPOINTS } from './apiEndpoints'
 import { mockResponse } from '../mock/mockHelper'
+import { appUrl } from '../utils/appPath'
 
 // ---------------------------------------------------------------------------
 // Public self-signup — aligned to the live contract:
@@ -78,11 +79,10 @@ export const signupService = {
     if (!SIGNUP_LIVE) {
       return (await mockResponse({ mode: 'MOCK', checkoutUrl: null, sessionId: 'mock', note: 'Demo checkout — no real charge' }, 900)).data
     }
-    const origin = window.location.origin
     const { data } = await publicApi.post(E.checkout, {
       token,
-      successUrl: successUrl || `${origin}/signup?paid=1`,
-      cancelUrl: cancelUrl || `${origin}/signup`,
+      successUrl: successUrl || appUrl('/signup?paid=1'),
+      cancelUrl: cancelUrl || appUrl('/signup'),
     })
     return data
   },
