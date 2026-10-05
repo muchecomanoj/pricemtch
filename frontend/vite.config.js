@@ -11,7 +11,7 @@ import react from '@vitejs/plugin-react'
 // Changing it requires restarting the dev server; Vite reads this once at boot.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8083'
+  const apiTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8080'
 
   return {
     plugins: [react()],
