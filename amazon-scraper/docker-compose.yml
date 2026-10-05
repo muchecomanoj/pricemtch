@@ -1,0 +1,21 @@
+name: pricematch-scraper
+services:
+  amazon-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amazon-scraper
+    image: amazon-scraper:latest
+    ports:
+      - "5000:5000"
+    environment:
+      # Optional: route Chrome through a proxy (AMAZON_PROXY or per-marketplace vars)
+      AMAZON_PROXY: ${AMAZON_PROXY:-}
+    # Chrome needs more shared memory than Docker's 64MB default.
+    shm_size: "1gb"
+    volumes:
+      - scraper-sessions:/app/temp_scraping_sessions
+    restart: unless-stopped
+
+volumes:
+  scraper-sessions:
