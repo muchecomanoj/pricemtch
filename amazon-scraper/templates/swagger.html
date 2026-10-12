@@ -46,7 +46,10 @@
     <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
     <script>
       window.ui = SwaggerUIBundle({
-        url: "/openapi.json",
+        // Same-origin and prefix-safe: works at /docs and at /amazon-scraper/docs
+        url:
+          ("{{ request.script_root }}" ||
+            location.pathname.replace(/\/docs\/?$/, "")) + "/openapi.json",
         dom_id: "#swagger-ui",
         deepLinking: true,
         defaultModelsExpandDepth: 0,

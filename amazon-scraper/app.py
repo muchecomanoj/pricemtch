@@ -33,7 +33,11 @@ def get_resource_path(relative_path):
 
 app = Flask(__name__, template_folder=get_resource_path('templates'))
 
-TEMP_DIR = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "temp_scraping_sessions")
+# Based on this file, not sys.argv[0]: under gunicorn/uWSGI argv[0] is the server
+# binary (/usr/local/bin/gunicorn), which would put the sessions folder somewhere
+# unwritable. AMAZON_TEMP_DIR overrides it when the app dir is read-only.
+TEMP_DIR = os.environ.get("AMAZON_TEMP_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "temp_scraping_sessions")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 USER_AGENTS = [

@@ -374,6 +374,18 @@
       const dropzone = document.getElementById("dropzone");
       const fileNameDisplay = document.getElementById("fileNameDisplay");
 
+      // Every request is built off this, so the page works at the domain root
+      // AND under a prefix such as /amazon-scraper behind a reverse proxy.
+      // request.script_root is set when the proxy passes the prefix through
+      // (mod_wsgi, X-Forwarded-Prefix); otherwise the page's own path is the
+      // app root, since this page IS the app root.
+      const SCRIPT_ROOT = "{{ request.script_root }}";
+      const API_BASE = SCRIPT_ROOT
+        ? SCRIPT_ROOT.replace(/\/+$/, "") + "/"
+        : location.pathname.endsWith("/")
+          ? location.pathname
+          : location.pathname + "/";
+
       fileInput.addEventListener("change", () => {
         if (fileInput.files.length > 0) {
           fileNameDisplay.innerText = fileInput.files[0].name;
@@ -413,14 +425,20 @@
           formData.append("file", fileInput.files[0]);
 
           try {
-            let uploadResponse = await fetch("/upload-excel", {
+            let uploadResponse = await fetch(API_BASE + "upload-excel", {
               method: "POST",
               body: formData,
             });
 
             if (!uploadResponse.ok) {
-              let errData = await uploadResponse.json();
-              throw new Error(errData.error || "Server upload error");
+              // The body is only JSON when Flask answered. A proxy 404/502 sends
+              // HTML, so fall back to the status and show which URL was called.
+              let detail = `HTTP ${uploadResponse.status} ${uploadResponse.statusText}`;
+              try {
+                const errData = await uploadResponse.json();
+                if (errData.error) detail = errData.error;
+              } catch (_) {}
+              throw new Error(`${detail}\n\nRequested: ${API_BASE}upload-excel`);
             }
 
             let uploadResult = await uploadResponse.json();
@@ -435,7 +453,7 @@
               currentStatus.innerText = `Scraping item ${i + 1} of ${total}...`;
 
               // 2. Pass 'domain' into the JSON body payload below
-              let stepResponse = await fetch("/scrape-single-asin", {
+              let stepResponse = await fetch(API_BASE + "scrape-single-asin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -460,7 +478,7 @@
             }
 
             currentStatus.innerText = "Assembling final ZIP file archive...";
-            window.location.href = `/download-zip?session_id=${session_id}`;
+            window.location.href = `${API_BASE}download-zip?session_id=${session_id}`;
 
             currentStatus.innerText = "Finished!";
             ringAnimator.style.display = "none";
@@ -468,9 +486,7 @@
             btn.disabled = false;
           } catch (err) {
             console.error(err);
-            alert(
-              "An application pipeline crash occurred. Re-verifying local execution server parameters...",
-            );
+            alert(`The bulk process failed.\n\n${err.message}`);
             resetDashboard();
           }
 
