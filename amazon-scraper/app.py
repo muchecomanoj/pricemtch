@@ -58,7 +58,10 @@ CORE_FIELDS = ("ASIN", "Marketplace", "ProductName", "Description",
                "Price", "PriceValue", "Currency",
                "ListPrice", "ListPriceValue", "SavingsPercent", "PriceStatus",
                "OriginalPrice", "OriginalPriceValue", "OriginalCurrency",
-               "FxRate", "FxAsOf", "FxSource")
+               "FxRate", "FxAsOf", "FxSource",
+               "EAN", "UPC", "GTIN", "ISBN10", "ISBN13",
+               # Structured identifiers for the API; underscore keeps it out of Excel
+               "_identifiers")
 
 def clean_amazon_image_url(url):
     if not url: return None
@@ -525,6 +528,24 @@ PAGE_ERROR = "error"                    # navigation failed or timed out
 PAGE_LOAD_TIMEOUT = 30
 # Real pages are 1-2 MB; 404, CAPTCHA and throttle stubs are all under ~4 KB
 STUB_PAGE_BYTES = 20000
+# Amazon sometimes fires the load event on a ~350 KB skeleton and streams the
+# product in a moment later. Judging the page at that instant reports a real
+# product as "no product page", so an ambiguous page is given time to hydrate.
+HYDRATION_TIMEOUT = 10
+PRODUCT_READY_JS = "return !!document.getElementById('productTitle');"
+
+def wait_for_product(driver, timeout=HYDRATION_TIMEOUT):
+    """ Poll (cheaply, via JS rather than re-reading the whole DOM) until the
+    product title exists. True if it turned up before the timeout. """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if driver.execute_script(PRODUCT_READY_JS):
+                return True
+        except Exception:
+            return False
+        time.sleep(0.25)
+    return False
 
 # Chrome exposes the document's HTTP status through Navigation Timing
 HTTP_STATUS_JS = ("var n = performance.getEntriesByType('navigation')[0];"
@@ -570,6 +591,18 @@ def open_product_page(driver, domain, asin):
         try:
             driver.get(url)
             outcome = classify_page(driver.page_source, http_status(driver))
+            # A full-size page with no product may just be mid-hydration; 404s,
+            # CAPTCHAs and stubs are already definite, so only this case waits.
+            if outcome == PAGE_NO_PRODUCT:
+                if wait_for_product(driver):
+                    outcome = PAGE_FOUND
+                elif "/dp/" in (getattr(driver, "current_url", "") or ""):
+                    # Still on the product URL, page fully rendered, yet no product
+                    # module: Amazon withheld it (soft anti-bot block). Under rapid
+                    # requests it serves this shell - navigation and carousels only -
+                    # for ASINs that render normally when paced. Treat it as blocked
+                    # so it is retried and never recorded as "the ASIN isn't here".
+                    outcome = PAGE_BLOCKED
         except Exception:
             outcome = PAGE_ERROR
         if outcome not in (PAGE_BLOCKED, PAGE_ERROR):
@@ -582,6 +615,121 @@ def open_product_page(driver, domain, asin):
     else:
         time.sleep(random.uniform(0.3, 0.8))  # pace consecutive storefronts
     return outcome, attempts
+
+# --- PRODUCT IDENTIFIERS (EAN / UPC / GTIN / ISBN) ---
+# Amazon publishes these under a handful of label spellings, and not on every
+# listing. Word boundaries keep "EAN" from matching inside "Mean temperature".
+IDENTIFIER_LABELS = [
+    ("isbn_13", re.compile(r"\bISBN[-\s]?13\b", re.I)),
+    ("isbn_10", re.compile(r"\bISBN[-\s]?10\b", re.I)),
+    ("gtin",    re.compile(r"\bGTIN(?:[-\s]?(?:8|12|13|14))?\b|Global Trade (?:Item|Identification) Number", re.I)),
+    ("ean",     re.compile(r"\bEAN(?:[-\s]?(?:8|13))?\b", re.I)),
+    ("upc",     re.compile(r"\bUPC(?:[-\s]?[AE])?\b", re.I)),
+    # A bare "ISBN" (common on book pages) is a 10- or 13-digit ISBN; sorted out by length
+    ("isbn",    re.compile(r"\bISBN\b", re.I)),
+]
+IDENTIFIER_FIELDS = ("EAN", "UPC", "GTIN", "ISBN10", "ISBN13")
+# Barcodes may be listed several to a cell ("840095865234 697003831214"), so a
+# cell is split on separators first - a greedy pattern would fuse them into one.
+IDENTIFIER_SPLIT = re.compile(r"[,;/|]|\s+")
+IDENTIFIER_VALUE = re.compile(r"^[0-9][0-9\-]{6,}[0-9X]$|^[0-9]{7,14}$", re.I)
+# A labelled identifier anywhere on the page, for layouts whose details aren't
+# in a table we harvest (e.g. the side-sheet variant)
+IDENTIFIER_IN_TEXT = re.compile(
+    r"\b(ISBN[-\s]?13|ISBN[-\s]?10|ISBN|GTIN(?:[-\s]?\d{1,2})?|EAN(?:[-\s]?\d{1,2})?|UPC(?:[-\s]?[AE])?)\b"
+    r"\s*[:‏‎]?\s*((?:[0-9][0-9\-\s]{6,}[0-9X])|[0-9]{7,14})", re.I)
+
+def gtin_check_digit_ok(digits):
+    """ The GS1 check digit used by EAN-8/12/13/14 and ISBN-13 """
+    if not digits.isdigit() or len(digits) not in (8, 12, 13, 14):
+        return False
+    body, check = digits[:-1], int(digits[-1])
+    total = 0
+    # Weights alternate 3/1 from the rightmost body digit leftwards
+    for index, char in enumerate(reversed(body)):
+        total += int(char) * (3 if index % 2 == 0 else 1)
+    return (10 - total % 10) % 10 == check
+
+def isbn10_check_digit_ok(code):
+    if len(code) != 10 or not code[:9].isdigit():
+        return False
+    total = sum((10 - i) * int(c) for i, c in enumerate(code[:9]))
+    check = code[9].upper()
+    total += 10 if check == "X" else (int(check) if check.isdigit() else -1)
+    return total % 11 == 0
+
+def normalise_identifier(raw):
+    """ Strip separators, keep a trailing X (ISBN-10 check digit) """
+    cleaned = re.sub(r"[^0-9Xx]", "", raw or "").upper()
+    return cleaned or None
+
+def classify_identifier(value, hinted_kind=None):
+    """ Decide what an identifier actually is from its length and check digit,
+    so a mislabelled or bare "ISBN" still lands in the right field. """
+    if not value:
+        return None
+    if len(value) == 10 and isbn10_check_digit_ok(value):
+        return "isbn_10"
+    if len(value) == 13 and value.startswith(("978", "979")) and gtin_check_digit_ok(value):
+        return "isbn_13"
+    if len(value) in (8, 12, 13, 14) and value.isdigit():
+        if hinted_kind in ("ean", "upc", "gtin"):
+            return hinted_kind
+        return {8: "ean", 12: "upc", 13: "ean", 14: "gtin"}[len(value)]
+    return None
+
+def collect_identifiers(soup, features):
+    """ EAN / UPC / GTIN / ISBN for the listings that publish them.
+
+    Read from the harvested detail rows first, then - for layouts that keep the
+    details somewhere we don't harvest - from a labelled scan of the page. Values
+    are kept only when the length and check digit are consistent, so a model or
+    part number can't be mistaken for a barcode.
+    """
+    found = {}
+
+    def record(kind, raw):
+        value = normalise_identifier(raw)
+        if not value:
+            return
+        resolved = classify_identifier(value, None if kind == "isbn" else kind)
+        if not resolved:
+            return
+        # A UPC-A is also an EAN-13 with a leading zero; record what was published
+        found.setdefault(resolved, [])
+        if value not in found[resolved]:
+            found[resolved].append(value)
+
+    # The scraper's own columns are skipped - except the identifier ones, since a
+    # detail row is itself called "EAN" or "UPC" and must still be read here.
+    skip = set(CORE_FIELDS) - set(IDENTIFIER_FIELDS)
+    for key, raw_value in features.items():
+        if key in skip or key.startswith("_") or not isinstance(raw_value, str):
+            continue
+        for kind, pattern in IDENTIFIER_LABELS:
+            if pattern.search(key):
+                for token in IDENTIFIER_SPLIT.split(raw_value):
+                    if IDENTIFIER_VALUE.match(token.strip()):
+                        record(kind, token.strip())
+                break
+
+    if not found:
+        text = " ".join(soup.get_text(" ").split())
+        for label, value in IDENTIFIER_IN_TEXT.findall(text):
+            kind = next((k for k, p in IDENTIFIER_LABELS if p.search(label)), None)
+            if kind:
+                record(kind, value)
+
+    return found
+
+def identifier_fields(identifiers):
+    """ Flat, Excel-friendly columns for the identifier map """
+    joined = {field: "" for field in IDENTIFIER_FIELDS}
+    for kind, field in (("ean", "EAN"), ("upc", "UPC"), ("gtin", "GTIN"),
+                        ("isbn_10", "ISBN10"), ("isbn_13", "ISBN13")):
+        if identifiers.get(kind):
+            joined[field] = ", ".join(identifiers[kind])
+    return joined
 
 # A price counts only if it is in the marketplace's currency, natively or converted
 PRICED_STATUSES = (PRICE_STATUS_OK, PRICE_STATUS_CONVERTED)
@@ -684,25 +832,25 @@ def parse_product_page(soup, asin, found_domain):
         asin_features["OriginalPriceValue"] = price_info["amount"]
         asin_features["OriginalCurrency"] = price_info["currency"]
 
-    # 3. Dynamic Technical Detail Tables
-    prod_details_div = soup.find("div", id="prodDetails")
-  
-    if prod_details_div:
-        for table in prod_details_div.find_all("table", class_="prodDetTable"):
-            for row in table.find_all("tr"):
-                th, td = row.find("th"), row.find("td")
-                if th and td:
-                    key = th.get_text(strip=True)
-                    val = " ".join(td.get_text().split())
-                    # Standardize keys to avoid minor duplication bugs
-                    if key:
-                        asin_features[key] = val
-    
+    # 3. Technical detail tables. Taken wherever they sit rather than only inside
+    # #prodDetails: the newer layouts put the same tables in #item_details or a
+    # side sheet, and that is often where UPC/EAN/GTIN are listed.
+    for table in soup.select("table.prodDetTable, #item_details table, "
+                             "#productDetails_db_sections table, #technicalSpecifications_feature_div table"):
+        for row in table.find_all("tr"):
+            th, td = row.find("th"), row.find("td")
+            if th and td:
+                key = th.get_text(strip=True)
+                val = " ".join(td.get_text().split())
+                # Standardize keys to avoid minor duplication bugs
+                if key:
+                    asin_features[key] = val
+
 
     # 3b. Detail bullets: the "Key : Value" list that books everywhere, and
     # whole storefronts such as .co.jp, use instead of the prodDetails tables.
     # Table rows win if a page carries both.
-    for li in soup.select("#detailBullets_feature_div li"):
+    for li in soup.select("#detailBullets_feature_div li, #detailBulletsWrapper_feature_div li, #item_details li"):
         text = " ".join(li.get_text().replace("‏", "").replace("‎", "").split())
         key, sep, val = text.partition(":")
         key, val = key.strip(), val.strip()
@@ -737,6 +885,11 @@ def parse_product_page(soup, asin, found_domain):
             if "play-button" not in cleaned.lower() and "icon" not in cleaned.lower(): final_cleaned_urls.append(cleaned)
 
     asin_features["ImageURLs"] = ", ".join(final_cleaned_urls) if final_cleaned_urls else ""
+
+    # 5. Barcodes, once every detail row has been harvested
+    identifiers = collect_identifiers(soup, asin_features)
+    asin_features.update(identifier_fields(identifiers))
+    asin_features["_identifiers"] = identifiers
 
     return asin_features, final_cleaned_urls
 
@@ -936,6 +1089,8 @@ def api_product():
         "featured_description": features.get("Feautured Product Description", ""),
         "price": build_price_response(features),
         "price_status": features.get("PriceStatus", PRICE_STATUS_UNAVAILABLE),
+        # EAN / UPC / GTIN / ISBN, when the listing publishes any
+        "identifiers": features.get("_identifiers") or {},
         "images": images,
         # Whatever the listing's technical-detail tables carried — brand, model,
         # dimensions, rank, reviews, ... varies product by product.
@@ -1010,7 +1165,8 @@ def download_zip():
                         all_asin_data.append(asin_dict)
                         # Dynamically expand columns list sequentially if a brand new feature shows up
                         for key in asin_dict.keys():
-                            if key not in global_headers:
+                            # Underscore-prefixed keys are structured API-only data
+                            if key not in global_headers and not key.startswith("_"):
                                 global_headers.append(key)
 
     # 2. Build the master Excel workbook

@@ -25,6 +25,7 @@ PRODUCT_EXAMPLE = {
         "savings_percent": 65,
     },
     "price_status": "ok",
+    "identifiers": {"ean": ["8901234567894"], "gtin": ["08901234567894"]},
     "images": [
         "https://m.media-amazon.com/images/I/71NTdzKNY5L.jpg",
         "https://m.media-amazon.com/images/I/41yKZ0a1xLL.jpg",
@@ -509,6 +510,26 @@ OPENAPI_SPEC = {
                     },
                 },
             },
+            "Identifiers": {
+                "type": "object",
+                "description": (
+                    "Barcodes the listing publishes. **Empty object when it publishes none** - "
+                    "many listings don't, and Amazon shows them per storefront, so the same ASIN "
+                    "can carry a UPC on `.com` and nothing on `.in`.\n\n"
+                    "Values are digits only (separators stripped, leading zeros kept - treat them "
+                    "as strings, not numbers). A field is present only when something was found, "
+                    "and each is a list because a listing can carry several. Every value is "
+                    "length- and check-digit-verified, so a model or part number can't slip in; "
+                    "a value is filed by what it actually is, not only by its label."
+                ),
+                "properties": {
+                    "ean": {"type": "array", "items": {"type": "string"}, "example": ["5015861510501"]},
+                    "upc": {"type": "array", "items": {"type": "string"}, "example": ["697003831139"]},
+                    "gtin": {"type": "array", "items": {"type": "string"}, "example": ["00697003831139"]},
+                    "isbn_10": {"type": "array", "items": {"type": "string"}, "example": ["1847941834"]},
+                    "isbn_13": {"type": "array", "items": {"type": "string"}, "example": ["9781847941831"]},
+                },
+            },
             "SearchLogEntry": {
                 "type": "object",
                 "description": "What one storefront answered.",
@@ -522,8 +543,9 @@ OPENAPI_SPEC = {
                             "- `found_no_price` - listed here but without a usable price, so skipped "
                             "(only with `require_price`).\n"
                             "- `not_found` - Amazon's 404 for this ASIN (a definite 'no').\n"
-                            "- `blocked` - a CAPTCHA or 'Server Busy' throttle page, even after one "
-                            "retry. The ASIN may well exist there.\n"
+                            "- `blocked` - a CAPTCHA, a 'Server Busy' throttle page, or a product "
+                            "page served without its product module (Amazon withholds it under "
+                            "rapid requests) - even after one retry. The ASIN may well exist there.\n"
                             "- `no_product_page` - a full page loaded that wasn't a product.\n"
                             "- `error` - navigation failed or timed out."
                         ),
@@ -584,6 +606,7 @@ OPENAPI_SPEC = {
                             "options only, cannot ship to the location)."
                         ),
                     },
+                    "identifiers": {"$ref": "#/components/schemas/Identifiers"},
                     "search_log": {
                         "type": "array",
                         "items": {"$ref": "#/components/schemas/SearchLogEntry"},
