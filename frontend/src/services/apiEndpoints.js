@@ -53,6 +53,9 @@ export const ENDPOINTS = {
   // bound, so a monitor never reports data older than its own cadence.
   monitors: {
     list: '/monitors',                 // GET ?productId&enabled | POST
+    bulk: '/monitors/bulk',            // POST { productIds, …settings } -> { created, skipped }
+    bulkActive: '/monitors/bulk-active', // POST ?enabled= [ids] -> { changed }
+    bulkDelete: '/monitors/bulk-delete', // POST [ids] -> { deleted }
     byId: (id) => `/monitors/${id}`,   // PATCH | DELETE
   },
 

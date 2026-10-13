@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { NotificationProvider } from './context/NotificationContext'
 import AppRoutes from './routes/AppRoutes'
 import ErrorBoundary from './components/common/ErrorBoundary'
+import { APP_BASE } from './utils/appPath'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -18,7 +19,8 @@ export default function App() {
         <ThemeProvider>
           <NotificationProvider>
             <AuthProvider>
-              <BrowserRouter>
+              {/* basename = Vite's `base`, so routes still match when the app is served from a sub-folder */}
+              <BrowserRouter basename={APP_BASE || undefined}>
                 <AppRoutes />
                 <ToastContainer position="top-right" autoClose={3000} newestOnTop theme="colored" />
               </BrowserRouter>

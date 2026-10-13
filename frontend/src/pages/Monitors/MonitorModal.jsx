@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FiInfo, FiAlertTriangle } from 'react-icons/fi'
+import { FiInfo, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import ProductSelector from '../../components/common/ProductSelector'
+import ProductChecklist from './ProductChecklist'
 import StatusBadge from '../../components/common/StatusBadge'
 import { marketplaceService } from '../../services/marketplaceService'
 import { mpLabel, marketplaceCodes, healthFor, healthBadge, isUsable } from '../../utils/marketplaces'
@@ -16,12 +17,24 @@ const DEFAULT_INTERVAL = 1440
 //
 // `lockProduct` is used from the product page, where the product is already
 // decided and offering a picker would only invite picking the wrong one.
+//
+// `multiple` (creating, from the Monitors page) swaps the single picker for a
+// checklist, so several products can be put on one schedule at once. onSave
+// then receives `productIds` instead of `productId`. `monitoredIds` marks the
+// products that already have a monitor. Editing stays one monitor, one product.
+//
+// `result` ({ created, skipped }, from a multi-product create) replaces the
+// form with what happened; `onBackFromResult` returns to the form, kept as it
+// was, when nothing could be started.
 export default function MonitorModal({
   show, onClose, onSave, saving, monitor, lockProduct, productId, minIntervalMinutes,
+  multiple = false, monitoredIds, result, onBackFromResult, error,
 }) {
   const editing = Boolean(monitor?.id)
+  const many = multiple && !editing && !lockProduct
 
   const [product, setProduct] = useState(productId ?? null)
+  const [productIds, setProductIds] = useState([])
   const [markets, setMarkets] = useState([])
   const [maxResults, setMaxResults] = useState(DEFAULT_MAX)
   const [interval, setIntervalMins] = useState(DEFAULT_INTERVAL)
@@ -30,10 +43,14 @@ export default function MonitorModal({
   useEffect(() => {
     if (!show) return
     setProduct(monitor?.productId ?? productId ?? null)
+    setProductIds([])
     setMarkets(monitor?.markets ?? [])
     setMaxResults(monitor?.maxResults ?? DEFAULT_MAX)
-    setIntervalMins(monitor?.intervalMinutes ?? DEFAULT_INTERVAL)
-  }, [show, monitor, productId])
+    // Never default to a cadence the plan refuses: once a day, or the plan's
+    // fastest check when that is slower.
+    setIntervalMins(monitor?.intervalMinutes
+      ?? Math.max(DEFAULT_INTERVAL, monitor?.minIntervalMinutes ?? minIntervalMinutes ?? 0))
+  }, [show, monitor, productId, minIntervalMinutes])
 
   // Channels come from the API, never a hardcoded list — which marketplaces
   // exist is a backend concern and has changed before.
@@ -51,7 +68,7 @@ export default function MonitorModal({
 
   const submit = () => {
     onSave({
-      productId: product,
+      ...(many ? { productIds } : { productId: product }),
       markets,
       maxResults: Math.min(50, Math.max(1, Number(maxResults) || DEFAULT_MAX)),
       intervalMinutes: Number(interval),
@@ -60,28 +77,49 @@ export default function MonitorModal({
 
   const belowFloor = floor != null && Number(interval) < floor
 
+  if (result) {
+    return <BulkResult show={show} result={result} onClose={onClose} onBack={onBackFromResult} />
+  }
+
   return (
     <Modal
       show={show}
       onClose={onClose}
       size="lg"
-      title={editing ? 'Edit monitor' : 'Monitor this product'}
+      title={editing ? 'Edit monitor' : many ? 'Monitor products' : 'Monitor this product'}
       footer={(
         <>
           <Button variant="light" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={saving} disabled={!product || belowFloor}>
-            {editing ? 'Save changes' : 'Start monitoring'}
+          <Button onClick={submit} loading={saving}
+            disabled={(many ? productIds.length === 0 : !product) || belowFloor}>
+            {editing ? 'Save changes'
+              : many && productIds.length > 1 ? `Start monitoring ${productIds.length} products`
+                : 'Start monitoring'}
           </Button>
         </>
       )}
     >
       <p className="text-muted small mb-4">
-        A monitor re-checks this product on a schedule, so competitor prices, trends and
+        A monitor re-checks {many ? 'each product' : 'this product'} on a schedule, so competitor prices, trends and
         recommendations stay current without anyone running a search by hand.
+        {many && ' Every product you tick gets its own monitor with the settings below.'}
       </p>
 
+      {/* A refusal of the whole request — nothing was created, and the form
+          keeps its values so one field can be corrected. */}
+      {error && (
+        <div className="field-note field-note--warn mb-3" style={{ maxWidth: 'none' }}>
+          <FiAlertTriangle size={15} />
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="row g-3">
-        {!lockProduct && (
+        {many ? (
+          <div className="col-12">
+            <ProductChecklist selected={productIds} onChange={setProductIds} monitoredIds={monitoredIds} />
+          </div>
+        ) : !lockProduct && (
           <div className="col-12">
             <ProductSelector value={product} onChange={setProduct} width="100%" />
           </div>
@@ -163,6 +201,61 @@ export default function MonitorModal({
           )}
         </div>
       </div>
+    </Modal>
+  )
+}
+
+// What a multi-product create did. Partial success is the normal case, so it
+// says both halves at once: what started, and what was skipped and why. The
+// reasons are written to be shown as-is, so identical ones are grouped with a
+// count rather than listed product by product.
+function BulkResult({ show, result, onClose, onBack }) {
+  const { created = [], skipped = [] } = result
+  const reasons = [...skipped.reduce((m, s) => {
+    const r = s.reason || 'Could not be monitored.'
+    return m.set(r, (m.get(r) || 0) + 1)
+  }, new Map())]
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`
+
+  return (
+    <Modal show={show} onClose={onClose} title={created.length ? 'Monitoring started' : 'Nothing could be monitored'}
+      footer={created.length ? (
+        <Button onClick={onClose}>Done</Button>
+      ) : (
+        <>
+          <Button variant="light" onClick={onClose}>Close</Button>
+          <Button onClick={onBack}>Change selection</Button>
+        </>
+      )}>
+      {created.length > 0 && (
+        <div className="d-flex align-items-start gap-2 mb-3">
+          <FiCheckCircle className="text-success flex-shrink-0 mt-1" />
+          <div>
+            <div className="fw-semibold">{n(created.length, 'product is', 'products are')} now being monitored.</div>
+            {/* The backend staggers the first runs so they don't all hit the
+                marketplaces at once — said here so the differing "next run"
+                times in the list read as intended, not as a fault. */}
+            {created.length > 1 && (
+              <div className="text-muted small">
+                Checks start now and roll out over the next few hours, so they don&apos;t all run at the same moment.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <div className="field-note field-note--warn" style={{ maxWidth: 'none' }}>
+          <FiAlertTriangle size={15} />
+          <div>
+            <div className="fw-semibold mb-1">{n(skipped.length, 'was', 'were')} skipped:</div>
+            <ul className="mb-0 ps-3 small">
+              {reasons.map(([reason, count]) => (
+                <li key={reason}>{count} — {reason}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }

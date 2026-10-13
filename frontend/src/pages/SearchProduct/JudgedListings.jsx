@@ -34,7 +34,7 @@ const decisionOf = (d) => DECISION[d] || { tone: 'slate', label: d || 'Unjudged'
 // borderline to review, so only the two confident decisions carry through —
 // and missingEvidence overrides even those, because a verdict the model could
 // not fully check is by definition not one to act on.
-function saveAs(r) {
+export function saveAs(r) {
   if (r.missingEvidence?.length) return undefined      // attaches as CANDIDATE
   return { MATCH: 'MATCHED', EQUIVALENT: 'EQUIVALENT' }[r.decision]
 }

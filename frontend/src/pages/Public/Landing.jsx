@@ -11,7 +11,7 @@ import { publicService } from '../../services/publicService'
 import { normalizePlans, isFreePlan } from '../../utils/plans'
 import { formatCurrency } from '../../utils/format'
 import Modal from '../../components/common/Modal'
-import { DemoForm } from '../../components/public/LeadForms'
+import { DemoForm, ContactForm, NewsletterForm } from '../../components/public/LeadForms'
 
 // ── Marketing landing page (public, no auth) ────────────────────────────────
 // Every "start" CTA drops the visitor into the self-signup flow with the plan
@@ -210,6 +210,7 @@ const rise = {
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
+  const [contactOpen, setContactOpen] = useState(false)
   const plansQuery = useQuery({
     queryKey: ['public', 'plans'],
     queryFn: publicService.plans,
@@ -458,15 +459,25 @@ export default function Landing() {
         <DemoForm submitLabel="Book a demo" />
       </Modal>
 
+      <Modal show={contactOpen} title="Contact us" onClose={() => setContactOpen(false)}>
+        <p className="text-muted small">Questions about the platform, billing or anything else — we’ll reply by email.</p>
+        <ContactForm />
+      </Modal>
+
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="lp-footer" id="footer">
         <div className="lp-container lp-footer-grid">
           <div className="lp-footer-brand">
             <a className="lp-brand" href="#top"><span className="lp-logo">PI</span><span className="lp-brand-name">{APP_NAME}</span></a>
             <p>The AI product &amp; competitor price intelligence platform for modern retail teams.</p>
+            <div className="lp-newsletter">
+              <div className="lp-newsletter-label">Get pricing insights by email</div>
+              <NewsletterForm landing />
+            </div>
           </div>
           <FooterCol title="Product" links={['Platform', 'Pricing', 'Product tour', 'Customers']} />
-          <FooterCol title="Company" links={['About', 'Careers', 'Blog', 'Contact']} />
+          {/* Contact opens the form; the rest are still placeholders with no page behind them. */}
+          <FooterCol title="Company" links={['About', 'Careers', 'Blog', ['Contact', () => setContactOpen(true)]]} />
           <FooterCol title="Legal" links={['Privacy', 'Terms', 'Security', 'SOC 2']} />
         </div>
         <div className="lp-container lp-footer-base">
@@ -502,11 +513,15 @@ function SectionHead({ eyebrow, title, sub, center }) {
   )
 }
 
+// A link is a label (a placeholder that returns to the top) or
+// [label, onClick] for one that does something on this page.
 function FooterCol({ title, links }) {
   return (
     <div className="lp-footer-col">
       <div className="lp-footer-col-title">{title}</div>
-      {links.map((l) => <a key={l} href="#top">{l}</a>)}
+      {links.map((l) => (Array.isArray(l)
+        ? <button key={l[0]} type="button" className="lp-footer-link" onClick={l[1]}>{l[0]}</button>
+        : <a key={l} href="#top">{l}</a>))}
     </div>
   )
 }

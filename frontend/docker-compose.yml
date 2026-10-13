@@ -1,0 +1,11 @@
+name: pricematch-frontend
+services:
+  pricematch-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pricematch-frontend
+    image: pricematch-frontend:latest
+    ports:
+      - "5174:5174"
+    restart: unless-stopped

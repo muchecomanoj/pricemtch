@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { appPath, currentRoute } from '../utils/appPath'
 
 // ---------------------------------------------------------------------------
 // Centralized Axios instance.
@@ -41,6 +42,22 @@ let waiters = []
 const flushWaiters = (error, token = null) => {
   waiters.forEach(({ resolve, reject }) => (error ? reject(error) : resolve(token)))
   waiters = []
+}
+
+// Pages that work without signing in (the routes outside ProtectedRoute in
+// AppRoutes.jsx). A leftover token in the browser still makes the app check
+// the session on these, and when that session turns out to be dead the user
+// must stay where they are — not be bounced to the login page. Matched as
+// prefixes, after the base folder is stripped ('/pricing' covers
+// '/pricing-legacy'); '/' only exactly.
+const PUBLIC_ROUTES = [
+  '/login', '/two-factor', '/forgot-password', '/reset-password',
+  '/signup', '/register/', '/activate', '/onboarding/', '/billing/',
+  '/unsubscribe', '/home', '/pricing', '/403', '/error',
+]
+const onPublicPage = () => {
+  const route = currentRoute()
+  return route === '/' || PUBLIC_ROUTES.some((p) => route.startsWith(p))
 }
 
 function clearSession() {
@@ -107,10 +124,11 @@ api.interceptors.response.use(
       } catch (refreshError) {
         flushWaiters(refreshError)
         clearSession()
-        // Session is unrecoverable — send the user to sign in (avoid loops).
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login')
-        }
+        // Session is unrecoverable — send the user to sign in. Not from a
+        // public page, though: someone opening an activation link or coming
+        // back from Stripe chose that URL, and a dead session from an earlier
+        // visit is no reason to throw it (and its token) away.
+        if (!onPublicPage()) window.location.assign(appPath('/login'))
         return Promise.reject(error)
       } finally {
         isRefreshing = false
@@ -136,7 +154,7 @@ api.interceptors.response.use(
         // to the login page so the user is not left guessing.
         clearSession()
         try { sessionStorage.setItem('loginNotice', body.message || 'Your account has been suspended.') } catch { /* storage blocked */ }
-        if (!window.location.pathname.startsWith('/login')) window.location.assign('/login')
+        if (!onPublicPage()) window.location.assign(appPath('/login'))
       }
     }
 

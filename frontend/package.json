@@ -9,7 +9,7 @@
     "dev:shared": "vite --mode shared",
     "dev:local": "vite --mode development",
     "start": "vite --mode shared",
-    "build": "vite build --mode shared",
+    "build": "vite build --mode production",
     "build:prod": "vite build --mode production",
     "build:local": "vite build --mode development",
     "preview": "vite preview",

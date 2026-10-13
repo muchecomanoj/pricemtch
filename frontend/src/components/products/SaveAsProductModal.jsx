@@ -27,7 +27,11 @@ import { formatCurrency } from '../../utils/format'
 // /products with the identifiers the listing carries, then the attach. The
 // second is optional but ticked, since a product with nothing to compare
 // against produces no statistics at all.
-export default function SaveAsProductModal({ show, onClose, listing, decision }) {
+//
+// `onUpdateExisting(product, form)`, when given, adds "Compare & update it" to
+// the already-in-your-catalog warning, handing over the existing product and
+// what this form would write. Bulk search uses it; single search does not.
+export default function SaveAsProductModal({ show, onClose, listing, decision, onUpdateExisting }) {
   const qc = useQueryClient()
   const { notify } = useNotification()
 
@@ -179,6 +183,13 @@ export default function SaveAsProductModal({ show, onClose, listing, decision })
                 <strong>{duplicate.title}</strong> already has this identifier.{' '}
                 <Link to={`/products/${duplicate.id}`} onClick={onClose}>Open it</Link> and save
                 this listing as a competitor instead of creating a second product.
+                {onUpdateExisting && (
+                  <div className="mt-2">
+                    <Button size="sm" variant="light" onClick={() => onUpdateExisting(duplicate, form)}>
+                      Compare &amp; update it
+                    </Button>
+                  </div>
+                )}
               </span>
             </div>
           )}

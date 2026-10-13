@@ -2,6 +2,7 @@ import { FiCheck, FiUsers, FiCloud, FiCpu, FiLifeBuoy, FiGrid } from 'react-icon
 import Card from '../common/Card'
 import { formatCurrency } from '../../utils/format'
 import { BILLING_CYCLES, TAX_RATE } from '../../mock/onboarding'
+import { isFreePlan } from '../../utils/plans'
 
 // Pure pricing math for a plan + cycle. Exported so the payment step reuses it.
 // The yearly total and any discount come from the plan's own prices (backend);
@@ -84,6 +85,19 @@ export default function SubscriptionSummary({ plan, cycleCode, onChangePlan }) {
       </div>
 
       <div className="col-12 col-lg-5">
+        {/* A free plan is its trial: no cycle, nothing billed. "Free × 12
+            months · Billed yearly" read as a free year. */}
+        {isFreePlan(plan) ? (
+          <Card title="Billing">
+            <div className="d-flex justify-content-between align-items-center">
+              <span className="fw-bold">Free</span>
+              <span className="h5 mb-0 fw-bold">{formatCurrency(0, plan.currency)}</span>
+            </div>
+            <div className="text-muted small mt-2">
+              {plan.trialDays > 0 ? `${plan.trialDays} days, ` : ''}no card needed. Choose a paid plan any time — your data carries over.
+            </div>
+          </Card>
+        ) : (
         <Card title="Billing">
           <Line label={`${plan.name} × ${cycle.months} month${cycle.months > 1 ? 's' : ''}`} value={formatCurrency(subtotal + discount, plan.currency)} />
           {discount > 0 && <Line label={`${cycle.label} discount (${discountPercent}%)`} value={`− ${formatCurrency(discount, plan.currency)}`} success />}
@@ -95,6 +109,7 @@ export default function SubscriptionSummary({ plan, cycleCode, onChangePlan }) {
           </div>
           <div className="text-muted small mt-2">Billed {cycle.label.toLowerCase()} · cancel anytime</div>
         </Card>
+        )}
       </div>
     </div>
   )

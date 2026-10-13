@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FiArrowLeft } from 'react-icons/fi'
 import Breadcrumb from './Breadcrumb'
+import { useHomePath, toHome, useVisibleCrumbs } from '../../hooks/useHomePath'
 
 // `back` controls the arrow shown left of the breadcrumb:
 //   undefined → derive the parent from the breadcrumb (the default)
@@ -9,15 +10,20 @@ import Breadcrumb from './Breadcrumb'
 export default function PageHeader({ title, subtitle, breadcrumb, actions, back }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const home = useHomePath()
+  // The same crumbs the breadcrumb shows, so the arrow never goes to a hidden "Home".
+  const crumbs = useVisibleCrumbs(breadcrumb || [])
 
   // Parent = the last LINKED crumb before the current one, so every nested page
   // gets a sensible target without having to declare it. A crumb pointing at the
-  // page you are already on (Dashboard's "Home") is not a parent.
+  // page you are already on (Dashboard's "Home", or Clients' for the platform
+  // owner) is not a parent.
   const parent = back === false
     ? null
     : typeof back === 'string'
       ? { to: back }
-      : [...(breadcrumb || [])].slice(0, -1).reverse()
+      : [...crumbs].slice(0, -1).reverse()
+        .map((c) => ({ ...c, to: c.to && toHome(c.to, home) }))
         .find((c) => c.to && c.to !== pathname)
 
   const goBack = () => {

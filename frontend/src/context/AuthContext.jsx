@@ -30,8 +30,10 @@ export function AuthProvider({ children }) {
       .then((u) => { assertNotBlocked(u); setUser(u) })
       .catch((e) => {
         localStorage.removeItem('token')
-        // Blocked since the last visit: say so on the login page.
-        if (e?.message) {
+        // Blocked since the last visit: say so on the login page. That is the
+        // error assertNotBlocked throws; a failed request (an expired session,
+        // say) has a response and its raw "status code 401" is no notice.
+        if (e?.message && !e?.response) {
           try { sessionStorage.setItem('loginNotice', e.message) } catch { /* storage blocked */ }
         }
       })

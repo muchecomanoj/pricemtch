@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNotification } from '../../context/NotificationContext'
 import { FREE_PLAN_CODE } from '../../utils/plans'
 import { formatDate } from '../../utils/format'
+import { appPath } from '../../utils/appPath'
 
 // The company's subscription state, on every page.
 //
@@ -44,7 +45,7 @@ export default function SubscriptionBanner() {
         {isFree
           ? 'Your free trial has ended. Choose a plan to use this feature.'
           : e.detail?.message || 'Your plan has expired. Renew to use this feature.'}{' '}
-        <a href="/my-subscription" className="fw-semibold text-reset">{isFree ? 'Choose a plan' : 'Renew'}</a>
+        <a href={appPath('/my-subscription')} className="fw-semibold text-reset">{isFree ? 'Choose a plan' : 'Renew'}</a>
       </span>,
     )
     window.addEventListener('account:read-only', onReadOnly)

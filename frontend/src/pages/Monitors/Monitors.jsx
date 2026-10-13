@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  FiPlus, FiEdit2, FiTrash2, FiRadio, FiAlertTriangle, FiClock,
+  FiPlus, FiEdit2, FiTrash2, FiRadio, FiAlertTriangle, FiClock, FiPause, FiPlay,
 } from 'react-icons/fi'
 import PageHeader from '../../components/common/PageHeader'
 import Card from '../../components/common/Card'
@@ -29,6 +29,8 @@ export default function Monitors() {
   const canManage = can('MANAGE_PRODUCTS')
 
   const [editing, setEditing] = useState(null)   // null = closed, {} = create, {...} = edit
+  const [bulkResult, setBulkResult] = useState(null) // { created, skipped } from a multi-product create
+  const closeModal = () => { setEditing(null); setBulkResult(null); save.reset() }
 
   const { data, isLoading } = useQuery({
     queryKey: ['monitors'],
@@ -42,18 +44,31 @@ export default function Monitors() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['monitors'] })
 
+  // Products that already have a monitor, so the create checklist can mark
+  // them rather than offer a tick the backend would refuse.
+  const monitoredIds = new Set(monitors.map((m) => m.productId))
+
   const save = useMutation({
-    mutationFn: (values) => (editing?.id
+    mutationFn: ({ productIds, ...values }) => (editing?.id
       ? monitorService.update(editing.id, values)
-      : monitorService.create(values)),
-    onSuccess: () => {
+      : productIds
+        ? monitorService.createMany(productIds, values)
+        : monitorService.create(values)),
+    onSuccess: (res) => {
+      // Several products: what started and what was skipped are both the
+      // answer, so the dialog shows them together instead of a toast.
+      if (res?.created) {
+        setBulkResult(res)
+        if (res.created.length) refresh()
+        return
+      }
       notify.success(editing?.id ? 'Monitor updated' : 'Monitoring started')
       setEditing(null)
       refresh()
     },
-    // 400 (cadence below the plan floor) and 409 (already monitored) both carry
-    // a useful message from the backend — show it rather than a generic failure.
-    onError: (err) => notify.error(err?.message || 'Could not save the monitor.'),
+    // No toast: the backend's message (cadence below the plan floor, already
+    // monitored, over 200 products…) is shown inside the dialog, which stays
+    // open with its values — nothing was saved, so one field can be corrected.
   })
 
   const toggle = useMutation({
@@ -61,6 +76,69 @@ export default function Monitors() {
     onSuccess: (_d, { enabled }) => { notify.success(enabled ? 'Monitoring resumed' : 'Monitoring paused'); refresh() },
     onError: (err) => notify.error(err?.message || 'Could not change the monitor.'),
   })
+
+  // Monitors picked for a bulk action, held as ids so a refresh can't swap the
+  // rows underneath the selection. Ids that have gone since are dropped.
+  const [selected, setSelected] = useState(() => new Set())
+  const clearSelection = () => setSelected(new Set())
+  const toggleRow = (id) => setSelected((s) => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const toggleAllRows = () => setSelected((s) => {
+    const ids = monitors.map((m) => m.id)
+    const all = ids.length > 0 && ids.every((id) => s.has(id))
+    const n = new Set(s)
+    ids.forEach((id) => (all ? n.delete(id) : n.add(id)))
+    return n
+  })
+  const picked = monitors.filter((m) => selected.has(m.id))
+
+  // Reports the backend's count, not the selection size. They differ when
+  // monitors went away while the page was open — those are skipped, not
+  // refused — and saying so is more honest than claiming all of them.
+  // Always refetched afterwards: resuming staggers the next runs, so the
+  // "Next run" column would otherwise show times that are simply wrong.
+  const reportBulk = (count, sent, verb) => {
+    const n = (k) => `${k} monitor${k === 1 ? '' : 's'}`
+    if (count >= sent) notify.success(`${n(count)} ${verb}`)
+    else if (count > 0) notify.success(`${count} of ${sent} ${verb} — the other ${sent - count} ${sent - count === 1 ? 'was' : 'were'} already gone.`)
+    else notify.info(`Nothing ${verb} — ${sent === 1 ? 'that monitor was' : 'those monitors were'} already gone.`)
+    clearSelection(); refresh()
+  }
+
+  // Pausing keeps the monitor and its settings and is undone in one click, so
+  // it doesn't ask. Deleting does. Only monitors whose state would actually
+  // change are sent.
+  const bulkEnabled = useMutation({
+    mutationFn: ({ ids, enabled }) => monitorService.setEnabledMany(ids, enabled),
+    onSuccess: (count, { ids, enabled }) => reportBulk(count, ids.length, enabled ? 'resumed' : 'paused'),
+    onError: (err) => notify.error(err?.message || 'Could not change those monitors.'),
+  })
+  const bulkRemove = useMutation({
+    mutationFn: (ids) => monitorService.removeMany(ids),
+    onSuccess: (count, ids) => reportBulk(count, ids.length, 'deleted'),
+    onError: (err) => notify.error(err?.message || 'Could not delete those monitors.'),
+  })
+  // Only monitors whose state would actually change are sent.
+  const setPickedEnabled = (enabled) => {
+    const ids = picked.filter((m) => m.enabled !== enabled).map((m) => m.id)
+    if (ids.length) bulkEnabled.mutate({ ids, enabled })
+  }
+  // Deleting throws the check history away; pausing keeps everything. The
+  // dialog says so, since "stop checking for now" is the far commoner intent.
+  const onBulkDelete = async () => {
+    const ids = picked.map((m) => m.id)
+    if (!ids.length) return
+    const ok = await confirm({
+      title: `Delete ${ids.length} monitor${ids.length === 1 ? '' : 's'}?`,
+      text: 'Their check history will be deleted too. To stop them running without losing anything, pause them instead.',
+      confirmText: 'Delete',
+    })
+    if (ok) bulkRemove.mutate(ids)
+  }
+  const bulkBusy = bulkEnabled.isPending || bulkRemove.isPending
+  const anyRunning = picked.some((m) => m.enabled)
+  const anyPaused = picked.some((m) => !m.enabled)
 
   const onDelete = async (m) => {
     const ok = await confirm({
@@ -161,7 +239,7 @@ export default function Monitors() {
         subtitle="Products checked automatically for new competitor listings."
         breadcrumb={[{ label: 'Home', to: '/dashboard' }, { label: 'Monitors' }]}
         actions={canManage && (
-          <Button write icon={FiPlus} onClick={() => setEditing({})}>Monitor a product</Button>
+          <Button write icon={FiPlus} onClick={() => setEditing({})}>Monitor products</Button>
         )}
       />
 
@@ -178,12 +256,43 @@ export default function Monitors() {
 
       <Card bodyClassName="p-0">
         {isLoading || monitors.length > 0 ? (
-          <DataTable
-            columns={columns}
-            rows={monitors}
-            loading={isLoading}
-            emptyMessage="No monitors yet."
-          />
+          <>
+            {canManage && picked.length > 0 && (
+              <div className="d-flex flex-wrap align-items-center gap-2 m-2 px-2 py-1 rounded-3"
+                style={{ background: 'var(--hover-soft)', border: '1px solid var(--border-soft)' }}>
+                <span className="small fw-semibold">{picked.length} selected</span>
+                <button className="btn btn-sm d-inline-flex align-items-center gap-1 fw-semibold"
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--border-soft)' }}
+                  disabled={bulkBusy || !anyRunning} title={anyRunning ? undefined : 'All selected monitors are already paused'}
+                  onClick={() => setPickedEnabled(false)} {...writeLock}>
+                  <FiPause size={13} /> Pause
+                </button>
+                <button className="btn btn-sm d-inline-flex align-items-center gap-1 fw-semibold"
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--border-soft)' }}
+                  disabled={bulkBusy || !anyPaused} title={anyPaused ? undefined : 'All selected monitors are already running'}
+                  onClick={() => setPickedEnabled(true)} {...writeLock}>
+                  <FiPlay size={13} /> Resume
+                </button>
+                <button className="btn btn-sm d-inline-flex align-items-center gap-1 fw-semibold"
+                  style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.25)' }}
+                  disabled={bulkBusy} onClick={onBulkDelete} {...writeLock}>
+                  <FiTrash2 size={13} /> Delete
+                </button>
+                {bulkBusy && <span className="spinner-border spinner-border-sm text-primary" role="status" />}
+                <button className="btn btn-sm btn-link text-decoration-none p-0 px-1 text-muted"
+                  onClick={clearSelection} disabled={bulkBusy}>Clear</button>
+              </div>
+            )}
+            <DataTable
+              columns={columns}
+              rows={monitors}
+              loading={isLoading}
+              emptyMessage="No monitors yet."
+              selected={canManage ? selected : undefined}
+              onToggleRow={canManage ? toggleRow : undefined}
+              onToggleAll={canManage ? toggleAllRows : undefined}
+            />
+          </>
         ) : (
           <div className="p-3">
             <EmptyState
@@ -192,7 +301,7 @@ export default function Monitors() {
               message="A monitor re-checks one product on a schedule, so competitor prices, trends and
                        recommendations stay current without anyone running a search by hand."
               action={canManage
-                ? <Button write icon={FiPlus} onClick={() => setEditing({})}>Monitor a product</Button>
+                ? <Button write icon={FiPlus} onClick={() => setEditing({})}>Monitor products</Button>
                 : <span className="text-muted small">Ask an admin or manager to set one up.</span>}
             />
           </div>
@@ -201,11 +310,16 @@ export default function Monitors() {
 
       <MonitorModal
         show={editing !== null}
-        onClose={() => setEditing(null)}
+        onClose={closeModal}
+        result={bulkResult}
+        error={save.isError ? (save.error?.message || 'Could not save the monitor.') : null}
+        onBackFromResult={() => setBulkResult(null)}
         onSave={save.mutate}
         saving={save.isPending}
         monitor={editing?.id ? editing : null}
         minIntervalMinutes={floor}
+        multiple
+        monitoredIds={monitoredIds}
       />
     </>
   )

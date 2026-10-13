@@ -1,12 +1,19 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  FiChevronDown, FiChevronRight, FiBookmark, FiArrowRight, FiAlertCircle,
-} from 'react-icons/fi'
-import Button from '../../components/common/Button'
-import { JudgedRow } from '../SearchProduct/JudgedListings'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { FiChevronDown, FiChevronRight, FiArrowRight, FiAlertCircle } from 'react-icons/fi'
+import JudgedListings, { JudgedRow, saveAs } from '../SearchProduct/JudgedListings'
+import { buildPayloads } from '../SearchProduct/SearchForm'
+import Card from '../../components/common/Card'
+import SaveAsProductModal from '../../components/products/SaveAsProductModal'
+import AttachToProductModal from '../MarketplaceTools/AttachToProductModal'
 import ExistingProductDialog from './ExistingProductDialog'
-import { bulkSearchService, parseListings } from '../../services/bulkSearchService'
+import { parseListings } from '../../services/bulkSearchService'
+import { productService } from '../../services/productService'
+import { marketplaceService } from '../../services/marketplaceService'
+import { useDestination } from '../../hooks/useDestination'
+import { keywordLadder } from '../../utils/identifiers'
+import { primaryIdentifier, identifiersOf } from '../../utils/listingToProduct'
 import { useNotification } from '../../context/NotificationContext'
 
 // One line of the uploaded file.
@@ -28,64 +35,147 @@ function inputSummary(r) {
   ].filter(([, v]) => v)
 }
 
-export default function BulkRow({ row: r, jobId, onSaved }) {
+// The fields "Add to catalog" fills in that an update may change. SKU is the
+// product's own label and identifiers are how it was recognised, so neither is
+// rewritten; a blank in the form means "nothing to say", never "clear it".
+const UPDATABLE = ['title', 'brand', 'category', 'condition', 'ourPrice']
+
+// A row found by its title already searched the market by keyword. One found
+// by an identifier only answered "what is this?" — one product.
+const isKeyword = (t) => !t || /TITLE|KEYWORD|QUERY|TEXT/i.test(t)
+
+// "What else is on the market?" — the same follow-up a single search runs
+// after an identifier hit (SearchProduct's findSimilar): a keyword search on
+// the title the marketplace returned, word by word and widest last, stopping
+// at the first query the marketplace answers at all. Only a completely empty
+// answer widens it; listings judged not-a-match mean the market holds
+// different products, and broadening then just returns more of them.
+async function findCompetitors(seed, destination) {
+  const ladder = keywordLadder(seed.title)
+  const tried = []
+  let last = null
+  for (const query of ladder) {
+    tried.push(query)
+    const { channel: payload } = buildPayloads(
+      // The listing's own storefront, so rivals are priced in the same market.
+      { key: 'TITLE', value: query, region: seed.storefront || 'US', image: null }, [], destination,
+    )
+    payload.judge = true
+    last = await marketplaceService.channelSearch(payload)
+    if (last?.matches?.length || last?.rejected?.length || last?.items?.length) {
+      return { title: query, result: last, tried }
+    }
+  }
+  return { title: tried[tried.length - 1] || seed.title, result: last, tried }
+}
+const norm = (v) => (v == null ? '' : String(v).trim())
+
+function differencesOf(product, form) {
+  return UPDATABLE
+    .filter((f) => norm(form[f]) !== '' && norm(form[f]) !== norm(product[f])
+      // 49 and 49.00 are the same price.
+      && !(f === 'ourPrice' && Number(form[f]) === Number(product[f])))
+    .map((f) => ({ field: f, current: product[f] ?? null, incoming: norm(form[f]), advisory: false }))
+}
+
+export default function BulkRow({ row: r }) {
+  const qc = useQueryClient()
   const { notify } = useNotification()
   const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [sku, setSku] = useState('')
-  const [needsSku, setNeedsSku] = useState(false)
-  const [existing, setExisting] = useState(null)   // SaveRowResponse with status EXISTS
-  const [saved, setSaved] = useState(null)         // productId, before the row refetches
+  const [adding, setAdding] = useState(null)       // the listing being made a product
+  const [attaching, setAttaching] = useState(null) // the listing being saved as a competitor
+  // { result, patch }: the existing product, what would change, and the
+  // partial update that "Yes, update it" sends.
+  const [existing, setExisting] = useState(null)
+  const [updating, setUpdating] = useState(false)
 
   const st = STATUS[r.status] || { tone: 'slate', label: r.status || 'Unknown' }
   const matches = parseListings(r.matchesJson)
   const rejected = parseListings(r.rejectedJson)
+  const { destination } = useDestination()
 
-  // CREATED / EXISTS / UPDATED / UNCHANGED all arrive as HTTP 200. Only EXISTS
-  // stops for an answer; the rest are finished outcomes and are reported as
-  // what actually happened rather than all as "saved".
-  const OUTCOME_TOAST = {
-    CREATED: ['success', 'Added to your catalogue'],
-    UPDATED: ['success', 'Existing product updated'],
-    UNCHANGED: ['info', 'Already up to date — nothing changed'],
-  }
+  // Competitors for a row found by identifier, as a single search shows them.
+  // Run when the row is opened rather than for every row of the file — each
+  // is a judged marketplace search of up to a minute — and kept once found,
+  // so closing and reopening the row doesn't search again.
+  const seed = matches[0]
+  const wantsRivals = !isKeyword(r.resolvedIdentifierType) && !!seed?.title
+  const rivalsQ = useQuery({
+    queryKey: ['bulkRivals', r.id],
+    queryFn: () => findCompetitors(seed, destination),
+    enabled: open && wantsRivals,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
+  })
 
-  const save = async (update = false) => {
-    setSaving(true)
+  // From the "already has this identifier" warning in the Add to catalog
+  // modal: compare the product already there with what the form would write,
+  // and ask before changing anything — the same dialog as before.
+  const compareExisting = async (dup, form) => {
+    const listing = adding
+    setAdding(null)
     try {
-      const res = await bulkSearchService.save(jobId, r.id, { sku, update })
-
-      if (res?.status === 'EXISTS') {
-        // Not an error and not a save: the catalogue already has this, and
-        // whether to overwrite it is the user's call.
-        setExisting(res)
-        return
-      }
-
-      const [tone, text] = OUTCOME_TOAST[res?.status] || ['success', 'Saved to your catalogue']
-      notify[tone](text)
-      setNeedsSku(false)
-      setExisting(null)
-      if (res?.productId != null) setSaved(res.productId)
-      onSaved?.(res)
+      const product = await productService.get(dup.id)
+      const differences = differencesOf(product, form)
+      const patch = Object.fromEntries(differences.map((d) => [
+        d.field, d.field === 'ourPrice' ? Number(d.incoming) : d.incoming,
+      ]))
+      setExisting({
+        patch,
+        result: {
+          productId: product.id,
+          productSku: product.sku,
+          productTitle: product.title,
+          matchedOn: primaryIdentifier(identifiersOf(listing)),
+          message: 'A product with this identifier is already in your catalogue. Updating changes only the fields below; its SKU and identifiers stay as they are.',
+          differences,
+        },
+      })
     } catch (e) {
-      // A genuine 400: the backend needs a SKU it could not derive, or the one
-      // supplied is taken. Both are fixed by typing one, so the field is
-      // offered rather than the message left as a dead end.
-      setNeedsSku(true)
-      notify.error(e?.message || 'Could not save this row — try giving it a SKU.')
-    } finally {
-      setSaving(false)
+      notify.error(e?.message || 'Could not load the existing product.')
     }
   }
 
-  const productId = r.savedProductId ?? saved
+  const applyUpdate = async () => {
+    if (!existing) return
+    if (!Object.keys(existing.patch).length) { setExisting(null); return }
+    setUpdating(true)
+    try {
+      await productService.update(existing.result.productId, existing.patch)
+      qc.invalidateQueries({ queryKey: ['products'] })
+      notify.success('Existing product updated')
+      setExisting(null)
+    } catch (e) {
+      notify.error(e?.message || 'Could not update the product.')
+    } finally {
+      setUpdating(false)
+    }
+  }
 
   return (
     <div className="rounded-3 border-soft" style={{ border: '1px solid var(--border-soft)' }}>
-      <ExistingProductDialog result={existing} saving={saving}
+      {/* The same modal as "Add to catalog" on a single search. */}
+      {adding && (
+        <SaveAsProductModal show listing={adding} decision={saveAs(adding)}
+          onClose={() => setAdding(null)}
+          onUpdateExisting={compareExisting} />
+      )}
+      {/* The same modal as "Save as competitor" on a single search. */}
+      {attaching && (
+        <AttachToProductModal show onClose={() => setAttaching(null)}
+          marketplace={attaching.marketplace}
+          itemId={attaching.marketplaceItemId}
+          title={attaching.title}
+          storefront={attaching.storefront}
+          // Carries the verdict through, as a single search does; the backend
+          // still applies its pack-size and condition rules.
+          decision={saveAs(attaching)} />
+      )}
+      <ExistingProductDialog result={existing?.result} saving={updating}
         onClose={() => setExisting(null)}
-        onConfirm={() => save(true)} />
+        onConfirm={applyUpdate} />
+
       <button type="button"
         className="btn w-100 text-start d-flex align-items-center gap-2 p-3"
         onClick={() => setOpen((o) => !o)}>
@@ -134,16 +224,17 @@ export default function BulkRow({ row: r, jobId, onSaved }) {
           {matches.length > 1 && (
             <div className="text-muted small mb-2">
               {matches.length} listings matched this row — they are alternatives, not a ranking.
-              Saving uses the best of them.
+              Add the one that is your product.
             </div>
           )}
           {matches.length > 0 && (
             <div className="row g-2">
               {matches.map((m, i) => (
                 <div className="col-12 col-xl-6" key={m.marketplaceItemId || i}>
-                  {/* The same verdict card as a single search — same data, same
-                      meaning, so it must not look like a different thing. */}
-                  <JudgedRow r={m} />
+                  {/* The same verdict card as a single search — same data,
+                      same meaning, same "Add to catalog" opening the same
+                      modal — so it must not look like a different thing. */}
+                  <JudgedRow r={m} onAddToCatalog={setAdding} onSave={setAttaching} />
                 </div>
               ))}
             </div>
@@ -155,29 +246,45 @@ export default function BulkRow({ row: r, jobId, onSaved }) {
             </div>
           )}
 
+          {/* ── Competitors for the product that was found ── */}
+          {wantsRivals && (
+            <Card className="mt-3" title="Competitors"
+              subtitle={rivalsQ.data
+                ? (rivalsQ.data.tried?.length > 1
+                  ? `Searched for "${rivalsQ.data.title}" — ${rivalsQ.data.tried.slice(0, -1).map((t) => `"${t}"`).join(', ')} found nothing`
+                  : `Searched by keyword for "${rivalsQ.data.title}" — from the title the marketplace returned`)
+                : 'A keyword search on the title the marketplace returned'}>
+              {rivalsQ.isFetching ? (
+                <div className="text-center py-4">
+                  <span className="spinner-border spinner-border-sm text-primary me-2" />
+                  <span className="text-muted small">Searching for competing products…</span>
+                </div>
+              ) : rivalsQ.isError ? (
+                <div className="text-muted small">
+                  {rivalsQ.error?.message || 'The competitor search failed.'}{' '}
+                  <button type="button" className="btn btn-link btn-sm p-0 align-baseline"
+                    onClick={() => rivalsQ.refetch()}>Try again</button>
+                </div>
+              ) : (
+                // similarMode opens the rejected list and renames it: a listing
+                // that is NOT the same product is precisely what was asked for.
+                <JudgedListings result={rivalsQ.data?.result} similarMode />
+              )}
+            </Card>
+          )}
+
           <div className="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top-soft">
-            {productId != null ? (
+            {r.savedProductId != null && (
               <Link className="btn btn-sm btn-light d-inline-flex align-items-center gap-1"
-                to={`/products/${productId}`}>
+                to={`/products/${r.savedProductId}`}>
                 Open in your catalogue <FiArrowRight />
               </Link>
-            ) : matches.length > 0 ? (
-              <>
-                {needsSku && (
-                  <input className="form-control form-control-sm" style={{ maxWidth: 220 }}
-                    placeholder="SKU for this product" value={sku}
-                    onChange={(e) => setSku(e.target.value)} />
-                )}
-                <Button variant="light" icon={FiBookmark} loading={saving} onClick={() => save(false)}>
-                  Save to catalogue
-                </Button>
-                <span className="text-muted small">
-                  Creates a product. If one already matches, you will be asked before anything changes.
-                </span>
-              </>
-            ) : (
-              <span className="text-muted small">Nothing to save from this row.</span>
             )}
+            <span className="text-muted small">
+              {matches.length > 0
+                ? 'Use “Add to catalog” on a listing to create it as a product.'
+                : 'Nothing to save from this row.'}
+            </span>
           </div>
         </div>
       )}
