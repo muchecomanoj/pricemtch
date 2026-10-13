@@ -17,6 +17,16 @@ public interface MonitorRepository extends JpaRepository<Monitor, Long> {
 
     Optional<Monitor> findByProductId(Long productId);
 
+    /** For bulk actions by the platform owner, who has no tenant of their own. */
+    List<Monitor> findByIdIn(List<Long> ids);
+
+    /**
+     * For bulk actions by a client. Scoping in the query rather than filtering
+     * afterwards means another company's ids simply do not come back, so they
+     * cannot be acted on by mistake.
+     */
+    List<Monitor> findByIdInAndTenantId(List<Long> ids, Long tenantId);
+
     /**
      * Monitors visible to the caller. {@code tenantId} null = platform owner.
      */

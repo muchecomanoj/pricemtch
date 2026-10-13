@@ -15,8 +15,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.priceintel.backend.dto.request.BulkMonitorRequest;
 import com.priceintel.backend.dto.request.MonitorRequest;
 import com.priceintel.backend.dto.response.ApiResponse;
+import com.priceintel.backend.dto.response.BulkMonitorResponse;
 import com.priceintel.backend.dto.response.MonitorResponse;
 import com.priceintel.backend.service.impl.MonitorService;
 
@@ -71,6 +73,59 @@ public class MonitorController {
     public ResponseEntity<ApiResponse<MonitorResponse>> create(@Valid @RequestBody MonitorRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(monitorService.create(request), "Monitor created"));
+    }
+
+    @PostMapping("/bulk")
+    @PreAuthorize(WRITE_ROLES)
+    @Operation(summary = "Start monitoring several products on the same settings",
+            description = "Up to 200 products per request.\n\n"
+                    + "**The shared settings are checked first.** A bad `intervalMinutes`, an "
+                    + "unknown marketplace or a `maxResults` outside 1–50 returns 400 and creates "
+                    + "nothing, rather than writing some monitors before failing.\n\n"
+                    + "**Partial success is normal and returns 200.** A product that is already "
+                    + "monitored, or is not in your catalogue, appears in `skipped` with a reason; "
+                    + "the rest are created. Only settings that are wrong for the whole request "
+                    + "are a 400.\n\n"
+                    + "First runs are spread across one interval. Creating fifty monitors due at "
+                    + "the same instant would run them together against the marketplace and AI "
+                    + "rate limits, and repeat that burst at every interval.")
+    public ResponseEntity<ApiResponse<BulkMonitorResponse>> createBulk(
+            @Valid @RequestBody BulkMonitorRequest request) {
+        BulkMonitorResponse result = monitorService.createBulk(request);
+        return ResponseEntity.ok(ApiResponse.success(result,
+                result.getCreated().size() + " monitor(s) created, "
+                        + result.getSkipped().size() + " skipped"));
+    }
+
+    @PostMapping("/bulk-active")
+    @PreAuthorize(WRITE_ROLES)
+    @Operation(summary = "Pause or resume many monitors",
+            description = "`enabled=false` pauses: the monitor and its history are kept and it "
+                    + "simply stops running. Use this rather than delete for \"stop checking this "
+                    + "for now\" — deleting throws the history away too.\n\n"
+                    + "Ids that do not exist, or belong to another client, are ignored rather than "
+                    + "refused; `changed` says how many really changed. Up to 200 per request.\n\n"
+                    + "Resuming spreads the next runs across one interval, so a mass resume does "
+                    + "not put every monitor on the same schedule.")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Integer>>> setEnabledBulk(
+            @RequestParam boolean enabled,
+            @RequestBody List<Long> monitorIds) {
+        int changed = monitorService.setEnabledBulk(monitorIds, enabled);
+        return ResponseEntity.ok(ApiResponse.success(java.util.Map.of("changed", changed),
+                changed + " monitor(s) " + (enabled ? "resumed" : "paused")));
+    }
+
+    @PostMapping("/bulk-delete")
+    @PreAuthorize(WRITE_ROLES)
+    @Operation(summary = "Delete many monitors",
+            description = "POST rather than DELETE because the ids travel in a body, which DELETE "
+                    + "does not reliably carry. Monitors belonging to another client are ignored; "
+                    + "the count says how many were actually removed. Up to 200 per request.")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Integer>>> deleteBulk(
+            @RequestBody List<Long> monitorIds) {
+        int deleted = monitorService.deleteBulk(monitorIds);
+        return ResponseEntity.ok(ApiResponse.success(
+                java.util.Map.of("deleted", deleted), deleted + " monitor(s) deleted"));
     }
 
     @PatchMapping("/{id}")

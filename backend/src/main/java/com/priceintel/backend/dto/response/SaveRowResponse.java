@@ -37,6 +37,18 @@ public class SaveRowResponse {
     private String productSku;
     private String productTitle;
 
+    /**
+     * The listing this answer is about, echoed back.
+     *
+     * <p>A row has many cards and several can be saved at once, so the caller
+     * needs to know which card a response belongs to rather than assuming the
+     * answers arrive in the order the clicks left. Null when the row was saved
+     * without naming a listing.</p>
+     */
+    private String marketplace;
+
+    private String marketplaceItemId;
+
     /** How the existing product was recognised, e.g. "ASIN B00FLYWNYQ" or "SKU PAT-2001". */
     private String matchedOn;
 

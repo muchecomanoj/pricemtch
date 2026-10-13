@@ -116,6 +116,16 @@ public class BulkSearchRow extends BaseEntity {
     @Column(name = "saved_product_id")
     private Long savedProductId;
 
+    /**
+     * The listings from this row that are already in the catalogue.
+     *
+     * <p>Not stored on the row — filled in when rows are listed, from
+     * {@code bulk_search_row_saves}. A row produces one product per saved
+     * listing, which {@link #savedProductId} cannot represent.</p>
+     */
+    @jakarta.persistence.Transient
+    private java.util.List<com.priceintel.backend.dto.response.SavedListing> savedListings;
+
     @Column(name = "searched_at")
     private Instant searchedAt;
 }

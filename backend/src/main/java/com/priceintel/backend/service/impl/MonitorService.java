@@ -2,13 +2,17 @@ package com.priceintel.backend.service.impl;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.priceintel.backend.dto.request.BulkMonitorRequest;
 import com.priceintel.backend.dto.request.MonitorRequest;
+import com.priceintel.backend.dto.response.BulkMonitorResponse;
 import com.priceintel.backend.dto.response.MonitorResponse;
 import com.priceintel.backend.entity.Monitor;
 import com.priceintel.backend.entity.Product;
@@ -34,6 +38,13 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class MonitorService {
+
+    /**
+     * The most ids one bulk action may carry. Matches the bulk create's cap:
+     * every monitor is recurring marketplace and AI spend, so a runaway
+     * selection should be refused rather than discovered on a bill.
+     */
+    private static final int MAX_BULK_MONITORS = 200;
 
     private final MonitorRepository monitorRepo;
     private final ProductRepository productRepo;
@@ -86,6 +97,160 @@ public class MonitorService {
         log.info("Monitor {} created for product {} every {} min",
                 monitor.getId(), product.getId(), interval);
         return toResponse(monitor, floor);
+    }
+
+    /**
+     * Starts monitoring several products on one set of settings.
+     *
+     * <p>The shared settings are checked once, before anything is written: a bad
+     * interval or an unknown marketplace is wrong for the whole request, and
+     * creating the first forty monitors before discovering it would leave the
+     * user to undo them by hand.</p>
+     *
+     * <p>Each product is then judged on its own. One that is already monitored
+     * is reported as skipped rather than failing the request — selecting a dozen
+     * products when three are already covered should start the other nine.</p>
+     */
+    @Transactional
+    public BulkMonitorResponse createBulk(BulkMonitorRequest request) {
+        List<Long> productIds = request.getProductIds().stream().filter(Objects::nonNull).distinct().toList();
+        if (productIds.isEmpty()) {
+            throw new BadRequestException("Select at least one product to monitor.");
+        }
+
+        // Checked before any product is looked at, so a request that cannot be
+        // right as a whole writes nothing at all.
+        String markets = joinMarkets(request.getMarkets());
+        int maxResults = request.getMaxResults() != null ? request.getMaxResults() : 5;
+        if (maxResults < 1 || maxResults > 50) {
+            throw new BadRequestException("maxResults must be between 1 and 50.");
+        }
+
+        Long tenantId = TenantContext.scopeOrAllForSuperAdmin();
+        int floor = minIntervalFor(tenantId);
+        int interval = request.getIntervalMinutes() != null ? request.getIntervalMinutes() : floor;
+        assertIntervalAllowed(interval, floor);
+
+        boolean enabled = request.getEnabled() == null || request.getEnabled();
+
+        List<Monitor> toCreate = new ArrayList<>();
+        List<BulkMonitorResponse.Skipped> skipped = new ArrayList<>();
+
+        for (Long productId : productIds) {
+            Product product;
+            try {
+                product = tenantProductOrThrow(productId);
+            } catch (ResourceNotFoundException notOurs) {
+                // Same answer whether it does not exist or belongs to another
+                // company: which it is, is not this caller's business.
+                skipped.add(skip(productId, "No such product in your catalogue."));
+                continue;
+            }
+            if (monitorRepo.findByProductId(product.getId()).isPresent()) {
+                skipped.add(skip(productId, "Already monitored. Edit the existing monitor instead."));
+                continue;
+            }
+            toCreate.add(Monitor.builder()
+                    .tenantId(product.getTenantId())
+                    .productId(product.getId())
+                    .markets(markets)
+                    .maxResults(maxResults)
+                    .intervalMinutes(interval)
+                    .enabled(enabled)
+                    .build());
+        }
+
+        // First runs are spread across one interval rather than all set to now.
+        // Fifty monitors due at the same instant run together, hit the
+        // marketplace and AI rate limits, and then do it again at every interval
+        // for as long as they exist — the burst never decays on its own.
+        Instant now = Instant.now();
+        long spreadSeconds = Duration.ofMinutes(interval).toSeconds();
+        for (int i = 0; i < toCreate.size(); i++) {
+            // The first is still due immediately, so the user sees something
+            // happen rather than wondering whether it worked.
+            long offset = toCreate.size() <= 1 ? 0 : (spreadSeconds * i) / toCreate.size();
+            toCreate.get(i).setNextRunAt(now.plusSeconds(offset));
+        }
+
+        List<Monitor> saved = monitorRepo.saveAll(toCreate);
+        log.info("Bulk monitor create: {} created, {} skipped, every {} min, first runs spread over {} min",
+                saved.size(), skipped.size(), interval, saved.size() <= 1 ? 0 : interval);
+
+        return BulkMonitorResponse.builder()
+                .created(saved.stream().map(m -> toResponse(m, floor)).toList())
+                .skipped(skipped)
+                .build();
+    }
+
+    private static BulkMonitorResponse.Skipped skip(Long productId, String reason) {
+        return BulkMonitorResponse.Skipped.builder().productId(productId).reason(reason).build();
+    }
+
+    /**
+     * Pauses or resumes many monitors at once.
+     *
+     * <p>Pausing keeps the monitor and its history and simply stops it running;
+     * deleting throws both away. Ids that do not exist, or belong to another
+     * company, are ignored rather than refused — a stale id in a selection is
+     * not worth failing the other forty for — and the count says how many really
+     * changed.</p>
+     *
+     * @return how many were changed
+     */
+    @Transactional
+    public int setEnabledBulk(List<Long> monitorIds, boolean enabled) {
+        List<Monitor> monitors = tenantMonitors(monitorIds);
+
+        if (enabled) {
+            // Resuming twenty monitors at once has the same problem as creating
+            // twenty: left due at the same instant they run together, exhaust the
+            // rate limits, and stay synchronised for every interval afterwards.
+            Instant now = Instant.now();
+            for (int i = 0; i < monitors.size(); i++) {
+                Monitor monitor = monitors.get(i);
+                monitor.setEnabled(true);
+                long spreadSeconds = Duration.ofMinutes(Math.max(1, monitor.getIntervalMinutes())).toSeconds();
+                long offset = monitors.size() <= 1 ? 0 : (spreadSeconds * i) / monitors.size();
+                monitor.setNextRunAt(now.plusSeconds(offset));
+            }
+        } else {
+            monitors.forEach(monitor -> monitor.setEnabled(false));
+        }
+
+        monitorRepo.saveAll(monitors);
+        log.info("Bulk {}: {} of {} monitor(s)", enabled ? "resume" : "pause",
+                monitors.size(), monitorIds.size());
+        return monitors.size();
+    }
+
+    /**
+     * Deletes many monitors at once. Ids that are not the caller's are ignored,
+     * so a stale selection removes what it can and reports the count.
+     */
+    @Transactional
+    public int deleteBulk(List<Long> monitorIds) {
+        List<Monitor> monitors = tenantMonitors(monitorIds);
+        monitorRepo.deleteAll(monitors);
+        log.info("Bulk delete: {} of {} monitor(s) removed", monitors.size(), monitorIds.size());
+        return monitors.size();
+    }
+
+    /** The monitors from this list that the caller may act on. */
+    private List<Monitor> tenantMonitors(List<Long> monitorIds) {
+        if (monitorIds == null || monitorIds.isEmpty()) {
+            throw new BadRequestException("Select at least one monitor.");
+        }
+        if (monitorIds.size() > MAX_BULK_MONITORS) {
+            throw new BadRequestException("Too many monitors in one request: " + monitorIds.size()
+                    + ". The limit is " + MAX_BULK_MONITORS + ".");
+        }
+        List<Long> ids = monitorIds.stream().filter(Objects::nonNull).distinct().toList();
+        Long tenantId = TenantContext.getTenantId();
+        // The platform owner has no tenant of their own and may act on any monitor.
+        return tenantId == null
+                ? monitorRepo.findByIdIn(ids)
+                : monitorRepo.findByIdInAndTenantId(ids, tenantId);
     }
 
     @Transactional

@@ -106,13 +106,22 @@ public class BulkSearchController {
                     + "`advisory` is the marketplace price, which is what a seller charges on "
                     + "Amazon rather than what this catalogue should sell at — worth a second look "
                     + "before accepting.\n\n"
-                    + "Pass `sku` to override the file's value, which may be blank or taken.")
+                    + "Pass `sku` to override the file's value, which may be blank or taken.\n\n"
+                    + "Pass `marketplace` and `marketplaceItemId` together to save **one matched "
+                    + "listing** rather than the row: its title, its identifiers and its price are "
+                    + "used, and a row can produce one product per listing saved. The pair is "
+                    + "echoed back in the response so a card can be matched to its answer. "
+                    + "Saving the same listing twice returns the product it already made. Omit "
+                    + "both to save the row itself, exactly as before.")
     public ResponseEntity<ApiResponse<SaveRowResponse>> save(
             @PathVariable Long jobId,
             @PathVariable Long rowId,
             @RequestParam(required = false) String sku,
-            @RequestParam(defaultValue = "false") boolean update) {
-        SaveRowResponse result = service.saveToCatalogue(jobId, rowId, sku, update);
+            @RequestParam(defaultValue = "false") boolean update,
+            @RequestParam(required = false) String marketplace,
+            @RequestParam(required = false) String marketplaceItemId) {
+        SaveRowResponse result = service.saveToCatalogue(
+                jobId, rowId, sku, update, marketplace, marketplaceItemId);
         return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
     }
 
