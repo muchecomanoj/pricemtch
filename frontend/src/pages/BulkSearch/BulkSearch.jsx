@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import {
   FiUploadCloud, FiArrowRight, FiAlertCircle, FiCheckCircle, FiClock,
 } from 'react-icons/fi'
@@ -51,7 +51,6 @@ function Stat({ label, value, hint, tone }) {
 export default function BulkSearch() {
   const { jobId } = useParams()
   const navigate = useNavigate()
-  const qc = useQueryClient()
   const { destination } = useDestination()
   const [uploading, setUploading] = useState(false)
   const [status, setStatus] = useState('')
@@ -85,11 +84,6 @@ export default function BulkSearch() {
   })
 
   useEffect(() => { setPage(1) }, [status, jobId])
-
-  const onSaved = () => {
-    qc.invalidateQueries({ queryKey: ['bulkSearchRows', jobId] })
-    qc.invalidateQueries({ queryKey: ['products'] })
-  }
 
   const rows = rowsQ.data?.content ?? []
 
@@ -171,7 +165,7 @@ export default function BulkSearch() {
                       ? 'Still searching — rows appear here as they finish, and this keeps running if you leave the page.'
                       : 'Finished.'}{' '}
                     <strong>Nothing has been added to your catalogue.</strong> Open a row and use
-                    Save to catalogue for the ones you want.
+                    Add to catalog on the listings you want.
                   </span>
                 </div>
               </>
@@ -195,7 +189,7 @@ export default function BulkSearch() {
               ) : (
                 <div className="d-flex flex-column gap-2">
                   {rows.map((r) => (
-                    <BulkRow key={r.id} row={r} jobId={jobId} onSaved={onSaved} />
+                    <BulkRow key={r.id} row={r} />
                   ))}
                 </div>
               )}

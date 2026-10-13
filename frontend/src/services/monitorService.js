@@ -12,6 +12,15 @@ import { ENDPOINTS } from './apiEndpoints'
 
 const E = ENDPOINTS.monitors
 
+// The bulk routes take at most 200 ids per request. A larger selection is
+// sent in batches, one after another, and the counts added up.
+const BATCH = 200
+async function inBatches(ids, send) {
+  let total = 0
+  for (let i = 0; i < ids.length; i += BATCH) total += await send(ids.slice(i, i + BATCH))
+  return total
+}
+
 export const monitorService = {
   async list({ productId, enabled } = {}) {
     if (USE_MOCK) return []
@@ -33,6 +42,25 @@ export const monitorService = {
     return (await api.post(E.list, body)).data
   },
 
+  // Several products on the same settings, one monitor each, in one request.
+  //
+  // Partial success is a 200: a product already monitored or no longer in the
+  // catalogue lands in `skipped` with a reason written to be shown as-is, and
+  // the rest are created. Only settings wrong for the whole request (interval
+  // below the plan floor, unknown marketplace, maxResults out of range, over
+  // 200 products, none) are a 400 — and then nothing at all was created.
+  //
+  // The created monitors' first runs are staggered by the backend on purpose,
+  // so fifty created together don't all fire at once. Resolves to
+  // { created: [MonitorResponse], skipped: [{ productId, reason }] }.
+  async createMany(productIds, { markets, maxResults, intervalMinutes, enabled = true } = {}) {
+    if (USE_MOCK) return { created: productIds.map((productId) => ({ id: 0, productId, enabled })), skipped: [] }
+    const body = { productIds, maxResults, intervalMinutes, enabled }
+    if (markets?.length) body.markets = markets
+    const { data } = await api.post(E.bulk, body)
+    return { created: data?.created ?? [], skipped: data?.skipped ?? [] }
+  },
+
   // PATCH is partial — send only what changed, so toggling `enabled` from a
   // list row can't overwrite a cadence someone set elsewhere.
   async update(id, patch) {
@@ -43,6 +71,24 @@ export const monitorService = {
   async remove(id) {
     if (USE_MOCK) return { ok: true }
     return (await api.delete(E.byId(id))).data
+  },
+
+  // Pause or resume several monitors, or delete several. Each resolves to the
+  // number the backend actually changed, which can be lower than the ids sent:
+  // monitors gone since the page loaded (or another company's) are ignored
+  // rather than refused, so a stale selection still does what it can.
+  //
+  // Resuming rewrites nextRunAt — the backend staggers the resumed monitors'
+  // next runs — so the caller refetches the list rather than flipping
+  // `enabled` locally.
+  async setEnabledMany(ids, enabled) {
+    if (USE_MOCK) return ids.length
+    return inBatches(ids, async (batch) =>
+      (await api.post(E.bulkActive, batch, { params: { enabled } })).data?.changed ?? 0)
+  },
+  async removeMany(ids) {
+    if (USE_MOCK) return ids.length
+    return inBatches(ids, async (batch) => (await api.post(E.bulkDelete, batch)).data?.deleted ?? 0)
   },
 }
 
