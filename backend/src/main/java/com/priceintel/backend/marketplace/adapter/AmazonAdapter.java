@@ -335,6 +335,17 @@ public class AmazonAdapter implements MarketplaceAdapter {
         if (storefront == null || storefront.isBlank()) {
             return getOffers(asin, condition);
         }
+        if (scraperSearch.handlesStorefront(storefront)) {
+            // One offer, not a seller list: the public page names the buy-box
+            // winner and not its competitors. The note on it says so, so an
+            // offers box with one row is not read as a product with one seller.
+            try {
+                return scraperSearch.offers(asin, storefront);
+            } catch (MarketplaceApiException e) {
+                log.debug("No page-reader offers for {} in {}: {}", asin, storefront, e.getMessage());
+                return List.of();
+            }
+        }
         List<String> conditions = condition == null || condition.isBlank()
                 ? DEFAULT_OFFER_CONDITIONS : List.of(condition);
         AmazonMarketplace market;
@@ -479,6 +490,12 @@ public class AmazonAdapter implements MarketplaceAdapter {
         if (storefront == null || storefront.isBlank()) {
             return getListing(asin);
         }
+        // Search has read these storefronts from the public page since the
+        // start; the listing screen did not, so a UK search found competitors
+        // and then opening one said the marketplace was not connected.
+        if (scraperSearch.handlesStorefront(storefront)) {
+            return scraperSearch.listing(asin, storefront);
+        }
         AmazonMarketplace market = pinned(storefront);
         try {
             return listingIn(asin, market);
@@ -562,6 +579,9 @@ public class AmazonAdapter implements MarketplaceAdapter {
     public PriceSnapshot getPrice(String asin, String storefront) {
         if (storefront == null || storefront.isBlank()) {
             return getPrice(asin);
+        }
+        if (scraperSearch.handlesStorefront(storefront)) {
+            return scraperSearch.price(asin, storefront);
         }
         AmazonMarketplace market = pinned(storefront);
         try {

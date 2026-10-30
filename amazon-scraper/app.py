@@ -33,11 +33,7 @@ def get_resource_path(relative_path):
 
 app = Flask(__name__, template_folder=get_resource_path('templates'))
 
-# Based on this file, not sys.argv[0]: under gunicorn/uWSGI argv[0] is the server
-# binary (/usr/local/bin/gunicorn), which would put the sessions folder somewhere
-# unwritable. AMAZON_TEMP_DIR overrides it when the app dir is read-only.
-TEMP_DIR = os.environ.get("AMAZON_TEMP_DIR") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "temp_scraping_sessions")
+TEMP_DIR = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "temp_scraping_sessions")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 USER_AGENTS = [
@@ -57,19 +53,25 @@ def search_order(domain=None, domains=None):
 
 # The scraper's own fields, as opposed to the per-product technical details that
 # vary listing by listing. Used to split the API response into the two groups.
-CORE_FIELDS = ("ASIN", "Marketplace", "ProductName", "Description",
-               "Feautured Product Description", "ImageURLs",
+CORE_FIELDS = ("ASIN", "Marketplace", "ProductName", "Category", "_categories",
+               "Description", "Feautured Product Description", "ImageURLs",
                "Price", "PriceValue", "Currency",
                "ListPrice", "ListPriceValue", "SavingsPercent", "PriceStatus",
                "OriginalPrice", "OriginalPriceValue", "OriginalCurrency",
                "FxRate", "FxAsOf", "FxSource",
                "EAN", "UPC", "GTIN", "ISBN10", "ISBN13",
+               "OtherSellersCount", "OtherSellers", "_other_sellers",
                # Structured identifiers for the API; underscore keeps it out of Excel
                "_identifiers")
 
 def clean_amazon_image_url(url):
     if not url: return None
     return re.sub(r'\._[A-Z0-9_,\-]+_\.', '.', url)
+
+# The category breadcrumbs above the product title. The id differs a little
+# between layouts, hence both; links only, so the "›" dividers are skipped.
+BREADCRUMB_SELECTOR = ("#wayfinding-breadcrumbs_feature_div ul li a, "
+                       "#wayfinding-breadcrumbs_container ul li a")
 
 # --- PRICE EXTRACTION ---
 # Amazon ships several price layouts depending on marketplace, category and A/B
@@ -356,7 +358,16 @@ def api_docs():
 
 @app.route("/openapi.json")
 def openapi_json():
-    return jsonify(OPENAPI_SPEC)
+    """ The spec, with `servers` pointed at wherever this app is mounted.
+
+    Served from the domain root it stays "/", but behind a proxy that mounts it
+    under a prefix (http://host/amazon-scraper) the clients that import this
+    spec must call /amazon-scraper/api/product, not /api/product.
+    """
+    spec = dict(OPENAPI_SPEC)
+    prefix = (request.script_root or request.headers.get("X-Forwarded-Prefix", "")).rstrip("/")
+    spec["servers"] = [{"url": prefix or "/", "description": "This server"}]
+    return jsonify(spec)
 
 @app.route("/upload-excel", methods=["POST"])
 def upload_excel():
@@ -735,6 +746,164 @@ def identifier_fields(identifiers):
             joined[field] = ", ".join(identifiers[kind])
     return joined
 
+# --- OTHER SELLERS ("Other sellers on Amazon" / all-offers panel) ---
+# The panel is not in the page source: Amazon loads it when the shopper clicks
+# through to it. The /gp/aod/ajax endpoints answer 404 to a direct fetch, so the
+# click is what opens it - after which the offers are in the live DOM.
+OPEN_OFFERS_JS = """
+const done = arguments[arguments.length - 1];
+const timeout = arguments[0];
+const selectors = ["#aod-ingress-link", "[data-action='show-all-offers-display']",
+                   "#buybox-see-all-buying-choices a", "a[href*='#aod-ingress-box']"];
+let clicked = null;
+for (const selector of selectors) {
+  const el = document.querySelector(selector);
+  if (el) { try { el.scrollIntoView({block: 'center'}); el.click(); clicked = selector; break; } catch (e) {} }
+}
+if (!clicked) { done({clicked: null, offers: 0}); }
+else {
+  const deadline = Date.now() + timeout;
+  const poll = () => {
+    const offers = document.querySelectorAll('#aod-offer').length;
+    if (offers > 0) done({clicked, offers});
+    else if (Date.now() > deadline) done({clicked, offers: 0, timedOut: true});
+    else setTimeout(poll, 300);
+  };
+  poll();
+}
+"""
+# "4.5 out of 5" is localised, but the star icon's class never is
+STAR_CLASS_PATTERN = re.compile(r"a-star(?:-mini)?-(\d)(?:-(\d))?")
+SELLER_ID_PATTERN = re.compile(r"seller=([A-Z0-9]+)")
+RATINGS_COUNT_PATTERN = re.compile(r"\(\s*([\d.,]+)\s")
+POSITIVE_PCT_PATTERN = re.compile(r"(\d{1,3})\s*%")
+
+def node_text(node, limit=None):
+    if not node:
+        return None
+    text = " ".join(node.get_text(" ").split())
+    return (text[:limit] if limit else text) or None
+
+def offer_price_block(node, domain):
+    """ Price of one offer, in the marketplace's currency like the main price """
+    raw = select_first_price_text(node, PRICE_SELECTORS) or compose_price_from_parts(node)
+    amount = parse_price_amount(raw)
+    if amount is None:
+        return None
+    currency = detect_currency(raw, domain)
+    target = CURRENCY_BY_DOMAIN.get(domain)
+    if currency == target:
+        return {"raw": raw, "amount": amount, "currency": currency, "converted": False}
+
+    conversion = convert_amount(amount, currency, target)
+    if not conversion:
+        # No rate available; report what the page showed rather than nothing
+        return {"raw": raw, "amount": amount, "currency": currency, "converted": False}
+    converted_amount, rate, as_of, source = conversion
+    return {
+        "raw": format_price(converted_amount, target),
+        "amount": converted_amount,
+        "currency": target,
+        "converted": True,
+        "original": {"raw": raw, "amount": amount, "currency": currency},
+        "fx": {"rate": rate, "as_of": as_of, "source": source},
+    }
+
+def parse_seller(node, domain):
+    """ Seller name, storefront id and feedback from one offer's "Sold by" row """
+    sold_by = node.select_one("#aod-offer-soldBy .a-col-right")
+    if not sold_by:
+        return None
+
+    link = sold_by.select_one("a[href*='seller=']") or sold_by.select_one("a")
+    seller = {"name": node_text(link) or node_text(sold_by.select_one("span")) or node_text(sold_by)}
+
+    href = link.get("href") if link and link.has_attr("href") else None
+    if href:
+        match = SELLER_ID_PATTERN.search(href)
+        if match:
+            seller["id"] = match.group(1)
+            seller["url"] = f"https://www.amazon.{domain}/sp?seller={match.group(1)}"
+
+    star = sold_by.select_one("[class*='a-star']")
+    if star:
+        match = STAR_CLASS_PATTERN.search(" ".join(star.get("class") or []))
+        if match:
+            whole, half = match.groups()
+            seller["rating"] = float(f"{whole}.{half}") if half else float(whole)
+
+    feedback = node_text(sold_by) or ""
+    count = RATINGS_COUNT_PATTERN.search(feedback)
+    if count:
+        digits = re.sub(r"[^\d]", "", count.group(1))
+        if digits:
+            seller["ratings_count"] = int(digits)
+    positive = POSITIVE_PCT_PATTERN.search(feedback)
+    if positive:
+        seller["positive_percent"] = int(positive.group(1))
+    return seller
+
+def parse_offer(node, domain):
+    ships_from_row = node.select_one("#aod-offer-shipsFrom .a-col-right")
+    ships_from = node_text(ships_from_row.select_one("span")) if ships_from_row else None
+
+    seller = parse_seller(node, domain)
+    link = node.select_one("#aod-offer-soldBy a[href*='seller=']")
+    href = link.get("href") if link and link.has_attr("href") else ""
+    if "isAmazonFulfilled=1" in href:
+        fulfilled_by_amazon = True
+    elif "isAmazonFulfilled=0" in href:
+        fulfilled_by_amazon = False
+    else:
+        # No seller link means Amazon itself is selling
+        fulfilled_by_amazon = seller is not None and (seller.get("name") or "").strip().lower() == "amazon"
+
+    return {
+        "price": offer_price_block(node, domain),
+        "condition": node_text(node.select_one("#aod-offer-heading")),
+        "seller": seller,
+        "ships_from": ships_from,
+        "fulfilled_by_amazon": fulfilled_by_amazon,
+        "delivery": node_text(node.select_one("#mir-layout-DELIVERY_BLOCK"), 200),
+    }
+
+def fetch_other_sellers(driver, domain, timeout=12):
+    """ Offers from the all-offers panel, excluding the pinned buy-box offer
+    (that one is already reported as the product's own `price`).
+
+    Returns [] when the listing has no other sellers, when the panel never
+    opens, or on any failure - never raises, since this is extra information
+    on top of a product that was already scraped successfully.
+    """
+    try:
+        driver.set_script_timeout(timeout + 10)
+        result = driver.execute_async_script(OPEN_OFFERS_JS, int(timeout * 1000))
+    except Exception:
+        return []
+    if not result or not result.get("offers"):
+        return []
+
+    soup = BeautifulSoup(driver.page_source, "lxml")
+    offers = []
+    for node in soup.select("#aod-offer"):
+        try:
+            offers.append(parse_offer(node, domain))
+        except Exception:
+            continue
+    return offers
+
+def summarise_offers(offers):
+    """ Flat columns for the Excel sheet """
+    if not offers:
+        return {"OtherSellersCount": 0, "OtherSellers": ""}
+    parts = []
+    for offer in offers:
+        price = (offer.get("price") or {}).get("raw") or "no price"
+        seller = (offer.get("seller") or {}).get("name") or "unknown seller"
+        condition = offer.get("condition") or ""
+        parts.append(f"{seller}: {price}" + (f" ({condition})" if condition else ""))
+    return {"OtherSellersCount": len(offers), "OtherSellers": " | ".join(parts)}
+
 # A price counts only if it is in the marketplace's currency, natively or converted
 PRICED_STATUSES = (PRICE_STATUS_OK, PRICE_STATUS_CONVERTED)
 PAGE_FOUND_NO_PRICE = "found_no_price"  # listed here, but no usable price
@@ -748,6 +917,18 @@ def parse_product_page(soup, asin, found_domain):
     # 1. Title Extraction
     title_span = soup.find("span", id="productTitle")
     asin_features["ProductName"] = title_span.get_text(strip=True) if title_span else "Not Found"
+
+    # 1b. Breadcrumb trail above the title, e.g.
+    # "DIY & Tools > Painting Supplies, Tools & Wall Treatments > Paint & Primer > Wall Paint".
+    # Only the anchors are taken - the "›" dividers are separate, link-less list
+    # items, so they drop out on their own.
+    categories = []
+    for link in soup.select(BREADCRUMB_SELECTOR):
+        level = " ".join(link.get_text().split())
+        if level and (not categories or categories[-1] != level):
+            categories.append(level)
+    asin_features["Category"] = " > ".join(categories)
+    asin_features["_categories"] = categories
 
     # 2. Description Parsing
     description_text = "Not Found"
@@ -897,7 +1078,8 @@ def parse_product_page(soup, asin, found_domain):
 
     return asin_features, final_cleaned_urls
 
-def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False):
+def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False,
+                include_other_sellers=False):
     """ Scrape one ASIN, trying `domain` first and then every other marketplace
     (or just `domains`, if given) until the product page turns up.
 
@@ -939,6 +1121,12 @@ def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False):
             features, images = parse_product_page(
                 BeautifulSoup(driver.page_source, "lxml"), asin, domain_attempt)
             if not require_price or features.get("PriceStatus") in PRICED_STATUSES:
+                # Opening the offers panel changes the DOM, so it is done only
+                # once the product page itself has been parsed.
+                if include_other_sellers:
+                    offers = fetch_other_sellers(driver, domain_attempt)
+                    features["_other_sellers"] = offers
+                    features.update(summarise_offers(offers))
                 return features, images, search_log
 
             entry["result"] = PAGE_FOUND_NO_PRICE
@@ -968,11 +1156,18 @@ def scrape_single_asin():
     if domain not in MARKETPLACES:
         return jsonify({"error": f"Unsupported domain '{domain}'"}), 400
 
+    # Off by default: stay on the marketplace that was picked. The web UI's
+    # checkbox turns the fallback through the other storefronts back on.
+    search_other = data.get("search_other_marketplaces", False)
+    if not isinstance(search_other, bool):
+        return jsonify({"error": "'search_other_marketplaces' must be true or false"}), 400
+    domains = None if search_other else [domain]
+
     session_folder = os.path.join(TEMP_DIR, session_id, asin)
     os.makedirs(session_folder, exist_ok=True)
 
     try:
-        asin_features, _images, _search_log = scrape_asin(asin, domain)
+        asin_features, _images, _search_log = scrape_asin(asin, domain, domains)
     except DriverLaunchError as driver_err:
         return jsonify({"error": f"Failed to launch Chrome background driver: {str(driver_err)}"}), 500
     except Exception as parse_err:
@@ -1060,8 +1255,14 @@ def api_product():
     if not isinstance(require_price, bool):
         return jsonify({"error": "'require_price' must be true or false"}), 400
 
+    # On by default here; it costs ~1-2s on top of the scrape
+    include_other_sellers = data.get("include_other_sellers", True)
+    if not isinstance(include_other_sellers, bool):
+        return jsonify({"error": "'include_other_sellers' must be true or false"}), 400
+
     try:
-        features, images, search_log = scrape_asin(asin, domain, domains, require_price)
+        features, images, search_log = scrape_asin(asin, domain, domains, require_price,
+                                                   include_other_sellers)
     except DriverLaunchError as driver_err:
         return jsonify({"error": f"Failed to launch Chrome background driver: {str(driver_err)}"}), 500
     except Exception as parse_err:
@@ -1089,12 +1290,18 @@ def api_product():
         "asin": asin,
         "marketplace": features.get("Marketplace"),
         "product_name": features.get("ProductName"),
+        # Breadcrumb trail, as one string and as its individual levels
+        "category": features.get("Category") or None,
+        "categories": features.get("_categories") or [],
         "description": features.get("Description"),
         "featured_description": features.get("Feautured Product Description", ""),
         "price": build_price_response(features),
         "price_status": features.get("PriceStatus", PRICE_STATUS_UNAVAILABLE),
         # EAN / UPC / GTIN / ISBN, when the listing publishes any
         "identifiers": features.get("_identifiers") or {},
+        # Everyone else selling this ASIN, from the "Other sellers" panel
+        "other_sellers": features.get("_other_sellers") or [],
+        "other_sellers_count": features.get("OtherSellersCount", 0),
         "images": images,
         # Whatever the listing's technical-detail tables carried — brand, model,
         # dimensions, rank, reviews, ... varies product by product.

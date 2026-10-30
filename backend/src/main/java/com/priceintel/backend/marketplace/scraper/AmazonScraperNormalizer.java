@@ -16,6 +16,9 @@ import com.priceintel.backend.exception.MarketplaceApiException;
 import com.priceintel.backend.marketplace.Marketplace;
 import com.priceintel.backend.marketplace.amazon.AmazonMarketplace;
 import com.priceintel.backend.marketplace.model.ItemIdentifier;
+import com.priceintel.backend.marketplace.model.ListingDetails;
+import com.priceintel.backend.marketplace.model.OfferListing;
+import com.priceintel.backend.marketplace.model.PriceSnapshot;
 import com.priceintel.backend.marketplace.model.SearchResult;
 import com.priceintel.backend.marketplace.model.SearchResultItem;
 
@@ -118,6 +121,140 @@ public class AmazonScraperNormalizer {
                 .marketplaceId(market != null ? market.getMarketplaceId() : null)
                 .note(notes.isEmpty() ? null : String.join(" ", notes))
                 .build();
+    }
+
+    /** Marks everything the page reader produces, so the screen can say where it came from. */
+    public static final String SOURCE = "PAGE_READER";
+
+    /**
+     * What the page says about one product, for the listing screen.
+     *
+     * <p>Thrown rather than returned empty when the product is not there: the
+     * listing screen asked for one known listing, and an empty object would
+     * render as a page of blanks with nothing explaining why.</p>
+     */
+    public ListingDetails toListingDetails(String json, String asin, String requestedCountry,
+                                           boolean acceptConverted) {
+        Read read = read(json, asin, requestedCountry, acceptConverted);
+        return ListingDetails.builder()
+                .marketplace(Marketplace.AMAZON)
+                .marketplaceItemId(read.itemId())
+                .title(text(read.root(), "product_name"))
+                .brand(text(read.root().path("details"), "brand"))
+                .url(read.market() == null ? null : read.market().productUrl(read.itemId()))
+                .available(read.price().amount() != null)
+                .price(read.price().amount())
+                .currency(read.price().currency())
+                .identifiers(identifiers(read.root(), read.itemId()))
+                .sourceTimestamp(LocalDateTime.now())
+                .mocked(false)
+                .countryCode(read.servedCountry())
+                .marketplaceId(read.market() == null ? null : read.market().getMarketplaceId())
+                .priceEstimated(read.price().estimated())
+                .priceNote(read.note())
+                .source(SOURCE)
+                // The page states neither of these, and a guessed condition is
+                // the one value that passes a condition check silently.
+                .condition(null)
+                .seller(null)
+                .build();
+    }
+
+    /** The page's price, for the listing screen's price call. */
+    public PriceSnapshot toPriceSnapshot(String json, String asin, String requestedCountry,
+                                         boolean acceptConverted) {
+        Read read = read(json, asin, requestedCountry, acceptConverted);
+        return PriceSnapshot.builder()
+                .marketplace(Marketplace.AMAZON)
+                .marketplaceItemId(read.itemId())
+                .itemPrice(read.price().amount())
+                // The page quotes one figure, delivered. Splitting it into item
+                // and shipping would be inventing a breakdown it never gave.
+                .landedPrice(read.price().amount())
+                .currency(read.price().currency())
+                .observedAt(LocalDateTime.now())
+                .mocked(false)
+                .countryCode(read.servedCountry())
+                .marketplaceId(read.market() == null ? null : read.market().getMarketplaceId())
+                .priceEstimated(read.price().estimated())
+                .priceNote(read.note())
+                .source(SOURCE)
+                .build();
+    }
+
+    /**
+     * The one offer the page shows — Amazon's buy box.
+     *
+     * <p>A single offer, never a seller list. The public page names the winning
+     * offer and not its competitors, so anything more would be invented. The
+     * note says so, because an offers box showing one row looks like a product
+     * with one seller rather than a list we cannot read.</p>
+     */
+    public List<OfferListing> toOffers(String json, String asin, String requestedCountry,
+                                       boolean acceptConverted) {
+        Read read = read(json, asin, requestedCountry, acceptConverted);
+        if (read.price().amount() == null) {
+            return new ArrayList<>();
+        }
+        String note = "Amazon " + (read.servedCountry() == null ? "this storefront"
+                : read.servedCountry()) + " is read from the public product page, which names only "
+                + "the winning offer. Other sellers are not listed."
+                + (read.note() == null ? "" : " " + read.note());
+
+        List<OfferListing> offers = new ArrayList<>();
+        offers.add(OfferListing.builder()
+                .marketplace(Marketplace.AMAZON)
+                .marketplaceItemId(read.itemId())
+                .listingPrice(read.price().amount())
+                .landedPrice(read.price().amount())
+                .currency(read.price().currency())
+                .buyBoxWinner(true)
+                .countryCode(read.servedCountry())
+                .priceEstimated(read.price().estimated())
+                .priceNote(note)
+                .source(SOURCE)
+                .build());
+        return offers;
+    }
+
+    /** The parsed page, shared by the three reads above. */
+    private record Read(JsonNode root, String itemId, String servedCountry,
+                        AmazonMarketplace market, Price price, String note) {
+    }
+
+    private Read read(String json, String asin, String requestedCountry, boolean acceptConverted) {
+        if (json == null) {
+            throw new MarketplaceApiException(
+                    "The page reader found no listing for " + asin + " on Amazon " + requestedCountry + ".");
+        }
+        JsonNode root = parse(json);
+        if (!root.path("found").asBoolean(true)) {
+            throw new MarketplaceApiException(
+                    "The page reader found no listing for " + asin + " on Amazon " + requestedCountry + ".");
+        }
+
+        String servedCountry = AmazonScraperClient.countryForDomain(
+                root.path("marketplace").asText(null));
+        AmazonMarketplace market = servedCountry == null ? null
+                : AmazonMarketplace.find(servedCountry).orElse(null);
+        String listingAsin = text(root, "listing_asin");
+        String itemId = listingAsin != null ? listingAsin : text(root, "asin");
+
+        List<String> notes = new ArrayList<>();
+        if (servedCountry != null && requestedCountry != null
+                && !servedCountry.equalsIgnoreCase(requestedCountry)) {
+            notes.add("Asked for Amazon " + requestedCountry + ", answered by Amazon "
+                    + servedCountry + ".");
+        }
+        if (listingAsin != null && !listingAsin.equalsIgnoreCase(text(root, "asin"))) {
+            notes.add("Amazon served listing " + listingAsin + " for " + asin
+                    + " — a parent or variant of it.");
+        }
+        Price price = price(root.path("price"), root.path("price_status").asText(""),
+                acceptConverted, notes);
+
+        return new Read(root, itemId, servedCountry, market, price,
+                notes.isEmpty() ? null : String.join(" ", notes));
     }
 
     /** A usable price, whether it is an estimate, and why. */

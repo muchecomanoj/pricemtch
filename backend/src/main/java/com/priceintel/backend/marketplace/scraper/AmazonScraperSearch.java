@@ -1,12 +1,16 @@
 package com.priceintel.backend.marketplace.scraper;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.stereotype.Component;
 
 import com.priceintel.backend.dto.request.MarketplaceSearchRequest;
 import com.priceintel.backend.exception.MarketplaceApiException;
 import com.priceintel.backend.marketplace.Marketplace;
+import com.priceintel.backend.marketplace.model.ListingDetails;
+import com.priceintel.backend.marketplace.model.OfferListing;
+import com.priceintel.backend.marketplace.model.PriceSnapshot;
 import com.priceintel.backend.marketplace.model.SearchResult;
 import com.priceintel.backend.utils.Storefront;
 
@@ -52,6 +56,65 @@ public class AmazonScraperSearch {
         return country != null
                 && !props.isSpApiRegion(country)
                 && AmazonScraperClient.domainFor(country) != null;
+    }
+
+    /**
+     * Whether the listing screen's reads for this storefront belong here.
+     *
+     * <p>The same test as {@link #handles}, minus the request: the listing
+     * screen always has an ASIN, so only the storefront decides. Search had this
+     * fallback from the start and the listing screen did not, which is why a UK
+     * search found competitors and then opening one said the marketplace was not
+     * connected.</p>
+     */
+    public boolean handlesStorefront(String storefront) {
+        if (!props.isFullyConfigured()) {
+            return false;
+        }
+        String country = Storefront.normalise(storefront);
+        return country != null
+                && !props.isSpApiRegion(country)
+                && AmazonScraperClient.domainFor(country) != null;
+    }
+
+    /** Listing details for a storefront SP-API cannot read. */
+    public ListingDetails listing(String asin, String storefront) {
+        String country = Storefront.normalise(storefront);
+        log.info("SP-API is not authorised for Amazon {} — reading listing {} from the page reader",
+                country, asin);
+        return normalizer.toListingDetails(product(asin, country), asin, country,
+                props.isAcceptConvertedPrices());
+    }
+
+    /** The current price for a storefront SP-API cannot read. */
+    public PriceSnapshot price(String asin, String storefront) {
+        String country = Storefront.normalise(storefront);
+        log.info("SP-API is not authorised for Amazon {} — reading price for {} from the page reader",
+                country, asin);
+        return normalizer.toPriceSnapshot(product(asin, country), asin, country,
+                props.isAcceptConvertedPrices());
+    }
+
+    /** The buy-box offer, which is all the public page names. */
+    public List<OfferListing> offers(String asin, String storefront) {
+        String country = Storefront.normalise(storefront);
+        return normalizer.toOffers(product(asin, country), asin, country,
+                props.isAcceptConvertedPrices());
+    }
+
+    /**
+     * Fetches the page, turning a reader failure into something the screen can
+     * show. Thrown rather than returned empty: unlike a search across channels,
+     * these calls have nothing else to fall back on, and a blank page with no
+     * reason is worse than a sentence saying the reader could not be reached.
+     */
+    private String product(String asin, String country) {
+        try {
+            return client.getProduct(asin, AmazonScraperClient.domainFor(country));
+        } catch (MarketplaceApiException e) {
+            throw new MarketplaceApiException("Amazon " + country + " is outside the SP-API "
+                    + "authorisation, and the page reader could not be reached: " + e.getMessage());
+        }
     }
 
     /**

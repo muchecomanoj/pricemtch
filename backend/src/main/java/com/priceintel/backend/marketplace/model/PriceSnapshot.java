@@ -30,4 +30,17 @@ public class PriceSnapshot {
 
     /** The provider's own marketplace id for that region (e.g. A1F83G8C2ARO7P). */
     private String marketplaceId;
+
+    /**
+     * The price is an estimate rather than an observed one. See
+     * {@link ListingDetails#isPriceEstimated()} — the same rule, and it must
+     * reach the screen for the same reason.
+     */
+    private boolean priceEstimated;
+
+    /** Why the price is an estimate, written to be shown to the user. */
+    private String priceNote;
+
+    /** Where this came from: {@code SP_API} or {@code PAGE_READER}. */
+    private String source;
 }

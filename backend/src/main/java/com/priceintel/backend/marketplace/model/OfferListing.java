@@ -56,4 +56,13 @@ public class OfferListing {
 
     /** Marketplace/region this offer was read from (e.g. US). */
     private String countryCode;
+
+    /** The price is an estimate. See {@link ListingDetails#isPriceEstimated()}. */
+    private boolean priceEstimated;
+
+    /** Why the price is an estimate, or why this is the only offer listed. */
+    private String priceNote;
+
+    /** Where this came from: {@code SP_API} or {@code PAGE_READER}. */
+    private String source;
 }
