@@ -54,15 +54,23 @@ public class BulkSearchController {
                     + "file takes over half an hour. Rows run one at a time because firing them "
                     + "together would not finish sooner, only exhaust the shared quota faster. "
                     + "Poll the job for progress.\n\n"
-                    + "Nothing is added to the catalogue. Save the rows you want afterwards.")
+                    + "Nothing is added to the catalogue. Save the rows you want afterwards.\n\n"
+                    + "`region` is which country's storefront to search — `US`, `GB`, `IN` — the "
+                    + "same list as a single search. Without it the run searches the marketplaces "
+                    + "the account is authorised for, which is why a file of UK products used to "
+                    + "come back empty. It is echoed on the job as `region`.\n\n"
+                    + "A **Region** column in the file overrides it row by row, for a file that "
+                    + "mixes countries. `country` and `postalCode` are a different thing: where the "
+                    + "goods ship to, used to price delivery.")
     public ResponseEntity<ApiResponse<BulkSearchJob>> start(
             @RequestParam("file") MultipartFile file,
             @RequestParam(defaultValue = "true") boolean judge,
+            @RequestParam(required = false) String region,
             @RequestParam(required = false) String country,
             @RequestParam(required = false) String postalCode) {
         Destination destination = (country == null && postalCode == null) ? null
                 : Destination.builder().country(country).postalCode(postalCode).build();
-        BulkSearchJob job = service.start(file, judge, destination);
+        BulkSearchJob job = service.start(file, judge, destination, region);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(job,
                 "Search accepted — " + job.getTotalRows() + " row(s) queued. Poll for progress."));
     }
