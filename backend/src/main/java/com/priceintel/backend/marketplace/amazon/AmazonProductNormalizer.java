@@ -168,7 +168,7 @@ public class AmazonProductNormalizer {
         JsonNode summary = firstSummary(root);
         BigDecimal price = extractPrice(pricingJson);
         String currency = extractCurrency(pricingJson);
-        return ListingDetails.builder()
+        return ListingDetails.builder().source("SP_API")
                 .marketplace(Marketplace.AMAZON)
                 .marketplaceItemId(asin)
                 .title(text(summary, "itemName", "Amazon product " + asin))
@@ -197,7 +197,7 @@ public class AmazonProductNormalizer {
     public PriceSnapshot toPriceSnapshot(String pricingJson, String asin, AmazonMarketplace market) {
         BigDecimal price = extractPrice(pricingJson);
         String currency = extractCurrency(pricingJson);
-        return PriceSnapshot.builder()
+        return PriceSnapshot.builder().source("SP_API")
                 .marketplace(Marketplace.AMAZON)
                 .marketplaceItemId(asin)
                 .itemPrice(price)

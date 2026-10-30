@@ -249,6 +249,41 @@
         font-weight: bold;
       }
 
+      .fallback-toggle {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 12px 14px;
+        background: rgba(15, 23, 42, 0.45);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #e2e8f0;
+        line-height: 1.45;
+      }
+
+      .fallback-toggle:hover {
+        border-color: rgba(255, 153, 0, 0.35);
+      }
+
+      .fallback-toggle input {
+        width: 16px;
+        height: 16px;
+        margin: 2px 0 0 0;
+        accent-color: var(--accent-orange);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      .fallback-toggle small {
+        display: block;
+        margin-top: 3px;
+        color: var(--text-muted);
+        font-size: 11.5px;
+      }
+
       .success-banner {
         display: none;
         margin-top: 25px;
@@ -328,6 +363,18 @@
             </option>
             {% endfor %}
           </select>
+
+          <label class="fallback-toggle" for="searchOtherDomains">
+            <input type="checkbox" id="searchOtherDomains" />
+            <span>
+              Search other marketplaces if the ASIN isn't on the selected one
+              <small
+                >Off: only the marketplace above is checked. On: the other
+                {{ marketplaces|length - 1 }} are searched too — slower, up to
+                ~40s per ASIN that isn't found.</small
+              >
+            </span>
+          </label>
         </div>
         <div class="dropzone-area" id="dropzone">
           <span class="dropzone-icon">📥</span>
@@ -376,9 +423,8 @@
 
       // Every request is built off this, so the page works at the domain root
       // AND under a prefix such as /amazon-scraper behind a reverse proxy.
-      // request.script_root is set when the proxy passes the prefix through
-      // (mod_wsgi, X-Forwarded-Prefix); otherwise the page's own path is the
-      // app root, since this page IS the app root.
+      // request.script_root is set when the proxy passes the prefix through;
+      // otherwise this page's own path IS the app root.
       const SCRIPT_ROOT = "{{ request.script_root }}";
       const API_BASE = SCRIPT_ROOT
         ? SCRIPT_ROOT.replace(/\/+$/, "") + "/"
@@ -409,6 +455,9 @@
           const ringAnimator = document.getElementById("ringAnimator");
 
           const selectedDomain = document.getElementById("domainSelect").value;
+          const searchOtherDomains = document.getElementById(
+            "searchOtherDomains",
+          ).checked;
 
           if (fileInput.files.length === 0) return;
 
@@ -431,14 +480,8 @@
             });
 
             if (!uploadResponse.ok) {
-              // The body is only JSON when Flask answered. A proxy 404/502 sends
-              // HTML, so fall back to the status and show which URL was called.
-              let detail = `HTTP ${uploadResponse.status} ${uploadResponse.statusText}`;
-              try {
-                const errData = await uploadResponse.json();
-                if (errData.error) detail = errData.error;
-              } catch (_) {}
-              throw new Error(`${detail}\n\nRequested: ${API_BASE}upload-excel`);
+              let errData = await uploadResponse.json();
+              throw new Error(errData.error || "Server upload error");
             }
 
             let uploadResult = await uploadResponse.json();
@@ -459,7 +502,9 @@
                 body: JSON.stringify({
                   asin: currentAsin,
                   session_id: session_id,
-                  domain: selectedDomain, // <-- Added dynamically here
+                  domain: selectedDomain,
+                  // Unchecked = stay on the selected marketplace only
+                  search_other_marketplaces: searchOtherDomains,
                 }),
               });
 
@@ -486,7 +531,9 @@
             btn.disabled = false;
           } catch (err) {
             console.error(err);
-            alert(`The bulk process failed.\n\n${err.message}`);
+            alert(
+              "An application pipeline crash occurred. Re-verifying local execution server parameters...",
+            );
             resetDashboard();
           }
 

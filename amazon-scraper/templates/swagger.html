@@ -45,18 +45,34 @@
     <div id="swagger-ui"></div>
     <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
     <script>
-      window.ui = SwaggerUIBundle({
-        // Same-origin and prefix-safe: works at /docs and at /amazon-scraper/docs
-        url:
-          ("{{ request.script_root }}" ||
-            location.pathname.replace(/\/docs\/?$/, "")) + "/openapi.json",
-        dom_id: "#swagger-ui",
-        deepLinking: true,
-        defaultModelsExpandDepth: 0,
-        displayRequestDuration: true,
-        tryItOutEnabled: true,
-        presets: [SwaggerUIBundle.presets.apis],
-      });
+      // The app may be mounted under a prefix (e.g. /amazon-scraper). Work the
+      // base out from this page's own URL, load the spec relative to it, and
+      // point `servers` at it so "Try it out" and the generated curl call the
+      // real path instead of the domain root.
+      const API_BASE = location.pathname.replace(/\/docs\/?$/, "");
+
+      fetch(API_BASE + "/openapi.json")
+        .then((r) => r.json())
+        .then((spec) => {
+          spec.servers = [{ url: API_BASE || "/", description: "This server" }];
+          window.ui = buildUi({ spec });
+        })
+        .catch((err) => {
+          document.getElementById("swagger-ui").textContent =
+            "Could not load " + API_BASE + "/openapi.json — " + err;
+        });
+
+      function buildUi(source) {
+        return SwaggerUIBundle({
+          ...source,
+          dom_id: "#swagger-ui",
+          deepLinking: true,
+          defaultModelsExpandDepth: 0,
+          displayRequestDuration: true,
+          tryItOutEnabled: true,
+          presets: [SwaggerUIBundle.presets.apis],
+        });
+      }
     </script>
   </body>
 </html>

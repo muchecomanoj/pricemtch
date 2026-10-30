@@ -45,4 +45,26 @@ public class ListingDetails {
 
     /** The provider's own marketplace id for that region (e.g. A1F83G8C2ARO7P). */
     private String marketplaceId;
+
+    /**
+     * The price is an estimate, not a figure the storefront quoted.
+     *
+     * <p>True for a listing read from the page reader in a currency other than
+     * the storefront's own: that quote carries import duty and international
+     * shipping, so it reads higher than what a local buyer pays. The screen must
+     * label it — an estimate shown as "current price" is a number somebody
+     * prices against.</p>
+     */
+    private boolean priceEstimated;
+
+    /** Why the price is an estimate, written to be shown to the user. */
+    private String priceNote;
+
+    /**
+     * Where this came from: {@code SP_API} or {@code PAGE_READER}.
+     *
+     * <p>Named so the screen can be honest about provenance without having to
+     * infer it from the storefront.</p>
+     */
+    private String source;
 }
