@@ -12,7 +12,7 @@ import { ItemIdentifiers } from '../../components/common/ListingCells'
 import { marketplaceItemService } from '../../services/marketplaceItemService'
 import { formatCurrency, formatDate, formatRelativeTime } from '../../utils/format'
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
-import { mpLabel, shortItemId } from '../../utils/marketplaces'
+import { mpLabel, shortItemId, listingPath } from '../../utils/marketplaces'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
 
 const PAGE_SIZE = 20
@@ -54,7 +54,7 @@ export default function TrackedItems() {
       minWidth: 320,
       render: (r) => (
         <div style={{ maxWidth: 420 }}>
-          <Link to={`/marketplace-tools/${String(r.marketplace).toLowerCase()}/${encodeURIComponent(r.marketplaceItemId)}`}
+          <Link to={listingPath(r.marketplace, r.marketplaceItemId, r.storefront)}
             className="fw-semibold clamp-2 text-decoration-none" title={r.title || ''}>
             {r.title || 'Untitled listing'}
           </Link>

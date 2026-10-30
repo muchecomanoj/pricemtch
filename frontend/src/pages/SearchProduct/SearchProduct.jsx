@@ -11,7 +11,7 @@ import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import EmptyState from '../../components/common/EmptyState'
 import StatusBadge from '../../components/common/StatusBadge'
-import { ItemIdentifiers } from '../../components/common/ListingCells'
+import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
 import ItemPriceHistory from '../../components/common/ItemPriceHistory'
 import ItemRecentChanges from '../../components/common/ItemRecentChanges'
 import SearchForm, { EMPTY_SEARCH, buildPayloads } from './SearchForm'
@@ -27,7 +27,7 @@ import ProductForm from '../../components/forms/ProductForm'
 import { productService } from '../../services/productService'
 import { useAuth } from '../../context/AuthContext'
 import { useNotification } from '../../context/NotificationContext'
-import { mpLabel, isScrapedRegion, storefrontLabel } from '../../utils/marketplaces'
+import { mpLabel, isScrapedRegion, storefrontLabel, listingPath } from '../../utils/marketplaces'
 import { alternateKey, KEY_LABEL, keywordLadder } from '../../utils/identifiers'
 import { formatCurrency, formatDateTime } from '../../utils/format'
 
@@ -431,7 +431,12 @@ export default function SearchProduct() {
                           <ItemIdentifiers identifiers={item.identifiers} />
                           <div className="mt-1">
                             {item.price != null
-                              ? <strong>{formatCurrency(item.price, item.currency || 'USD')}</strong>
+                              ? (
+                                <>
+                                  <strong>{formatCurrency(item.price, item.currency || 'USD')}</strong>
+                                  <EstimatedBadge estimated={item.priceEstimated} note={item.priceNote} />
+                                </>
+                              )
                               : (
                                 <span className="text-muted small"
                                   title="Amazon prices by the visitor's location, so this storefront quotes an import price rather than its shelf price. A converted figure would be wrong by shipping and duty.">
@@ -460,7 +465,7 @@ export default function SearchProduct() {
                             )}
                             {hitMarket && item.marketplaceItemId && (
                               <Link className="btn btn-sm btn-light d-inline-flex align-items-center gap-1"
-                                to={`/marketplace-tools/${hitMarket.toLowerCase()}/${encodeURIComponent(item.marketplaceItemId)}`}>
+                                to={listingPath(hitMarket, item.marketplaceItemId, item.storefront)}>
                                 Details <FiArrowRight />
                               </Link>
                             )}

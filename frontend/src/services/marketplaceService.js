@@ -20,6 +20,10 @@ import { MARKETPLACES } from '../constants'
 // off just as they were answering.
 const searchTimeout = ({ judge, image }) => (image ? 120000 : judge ? 90000 : 60000)
 
+// The listing reads fall back to the same page reader on those storefronts, and
+// the page opens three of them at once. The global 20s would cut them off.
+const LISTING_READ_TIMEOUT = 90000
+
 
 // Amazon money often arrives as { amount, currencyCode } rather than a number.
 const money = (v) => {
@@ -41,7 +45,11 @@ function normalizeOffer(o) {
     sellerName: pick('sellerName', 'SellerName', 'seller', 'merchantName', 'Seller') ?? null,
     price: money(price),
     shipping: money(shipping),
-    currency: currencyOf(price) || pick('currency', 'currencyCode', 'CurrencyCode') || 'USD',
+    // Null when the offer does not say: the panel falls back to the listing's
+    // currency. A page-reader offer sends none, and USD here printed pounds as dollars.
+    currency: currencyOf(price) || pick('currency', 'currencyCode', 'CurrencyCode') || null,
+    priceEstimated: !!o?.priceEstimated,
+    priceNote: o?.priceNote || null,
     condition: pick('condition', 'Condition', 'subCondition', 'SubCondition') ?? null,
     // The one that matters: whoever holds this is the price a shopper sees.
     buyBox: truthy(pick('isBuyBoxWinner', 'IsBuyBoxWinner', 'buyBoxWinner', 'isFeaturedMerchant')),
@@ -140,7 +148,7 @@ export const marketplaceService = {
   async listingOffers(marketplace, itemId, { region } = {}) {
     if (USE_MOCK) return { offers: [], raw: null, recognised: true }
     const { data } = await api.get(ENDPOINTS.marketplaces.listingOffers(marketplace, itemId),
-      { params: { region: region || undefined } })
+      { params: { region: region || undefined }, timeout: LISTING_READ_TIMEOUT })
     // The array may be the payload itself or sit under a key.
     const list = Array.isArray(data) ? data
       : [data?.offers, data?.Offers, data?.items, data?.content].find(Array.isArray)
@@ -215,12 +223,12 @@ export const marketplaceService = {
   async listing(marketplace, itemId, { region } = {}) {
     if (USE_MOCK) return (await mockResponse({ marketplace, itemId })).data
     return (await api.get(ENDPOINTS.marketplaces.listing(marketplace, itemId),
-      { params: { region: region || undefined } })).data
+      { params: { region: region || undefined }, timeout: LISTING_READ_TIMEOUT })).data
   },
   async listingPrice(marketplace, itemId, { region } = {}) {
     if (USE_MOCK) return (await mockResponse({ marketplace, itemId, price: 44.99 })).data
     return (await api.get(ENDPOINTS.marketplaces.listingPrice(marketplace, itemId),
-      { params: { region: region || undefined } })).data
+      { params: { region: region || undefined }, timeout: LISTING_READ_TIMEOUT })).data
   },
   async listingSales(marketplace, itemId) {
     if (USE_MOCK) return (await mockResponse({ marketplace, itemId, units: 0 })).data

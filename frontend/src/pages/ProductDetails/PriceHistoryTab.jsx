@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import Card from '../../components/common/Card'
 import ChartCard from '../../components/charts/ChartCard'
 import EmptyState from '../../components/common/EmptyState'
-import { FiBarChart2, FiActivity } from 'react-icons/fi'
+import { FiBarChart2, FiActivity, FiInfo, FiAlertTriangle } from 'react-icons/fi'
 import { productIntelService } from '../../services/productIntelService'
 import { ENDPOINTS } from '../../services/apiEndpoints'
-import { formatDate } from '../../utils/format'
+import { formatDate, formatCurrency, formatRelativeTime } from '../../utils/format'
 import { NeedsSearch } from './shared'
 
 // Price history is per LISTING, not per product — GET /listings/{id}/price-history.
@@ -32,6 +32,28 @@ function axisLabels(rows) {
     // day reads as times under a single date rather than the date eight times.
     return dates[i] === dates[i - 1] ? time : `${dates[i]} ${time}`
   })
+}
+
+// A price is stored only when it CHANGES (FR-PRICE-003) — a check that finds
+// the same price records only that the listing was seen. So the price between
+// two points is the earlier one, and a range with no change in it still has a
+// price: the last one before it. The series is drawn that way — opening at the
+// range start with the price carried in, held flat until each change, and
+// running on to now — instead of an empty chart that reads as "never checked".
+function priceSeries(all, days) {
+  const now = new Date()
+  const from = new Date(now.getTime() - Number(days) * 86400000)
+  const at = (r) => new Date(r.observedAt)
+  const inRange = all.filter((r) => at(r) >= from && at(r) <= now)
+  const before = [...all].reverse().find((r) => at(r) < from) || null
+  const last = inRange[inRange.length - 1] || before
+  if (!last) return { points: [], inRange, before, last: null }
+  const points = [
+    ...(before ? [{ ...before, observedAt: from.toISOString(), carried: true }] : []),
+    ...inRange,
+    { ...last, observedAt: now.toISOString(), carried: true },
+  ]
+  return { points, inRange, before, last }
 }
 
 // The range buttons drive real from/to query params (ISO datetimes).
@@ -65,10 +87,13 @@ export default function PriceHistoryTab({
 
   const activeId = inPicker ? selectedId : chartable[0]?.id ?? null
 
-  const params = rangeToParams(range)
+  // The listing's whole series, not just the range: the price in force when
+  // the range opens is the last change BEFORE it, which a ranged query can't
+  // return. The range is applied here. A listing's series is small — one point
+  // per price change — so this is one cheap request per listing.
   const history = useQuery({
-    queryKey: ['priceHistory', activeId, range],
-    queryFn: () => productIntelService.priceHistory(activeId, params),
+    queryKey: ['priceHistory', activeId, 'all'],
+    queryFn: () => productIntelService.priceHistory(activeId),
     enabled: !!activeId,
   })
 
@@ -92,14 +117,24 @@ export default function PriceHistoryTab({
     )
   }
 
-  const rows = history.data || []
-  const chart = rows.length
+  const { points, inRange, before, last } = priceSeries(history.data || [], range)
+  const chart = points.length
     ? {
-      labels: axisLabels(rows),
-      'Item price': rows.map((r) => r.itemPrice),
-      'Landed price': rows.map((r) => r.landedPrice),
+      labels: axisLabels(points),
+      'Item price': points.map((r) => r.itemPrice),
+      'Landed price': points.map((r) => r.landedPrice),
     }
     : null
+
+  // When the monitor last looked at this listing, whatever it found. A
+  // monitor re-checks only the listings its own search returns that run, so a
+  // listing can go unchecked for weeks — worth saying, since it is the other
+  // reason a chart stays flat.
+  const listing = chartable.find((c) => c.id === activeId)
+  const lastSeen = listing?.lastSeenAt ? new Date(listing.lastSeenAt) : null
+  const rangeStart = new Date(Date.now() - Number(range) * 86400000)
+  const unchecked = lastSeen && lastSeen < rangeStart
+  const ccy = last?.currency || listing?.currency || 'USD'
 
   return (
     <>
@@ -127,14 +162,37 @@ export default function PriceHistoryTab({
         </div>
       </div>
 
-      {rows.length === 0 && !history.isLoading ? (
+      {!history.isLoading && last && (
+        <div className={`field-note ${unchecked ? 'field-note--warn' : ''} mb-3`} style={{ maxWidth: 'none' }}>
+          {unchecked ? <FiAlertTriangle size={15} /> : <FiInfo size={15} />}
+          <span>
+            {inRange.length === 0
+              ? <>No price change in this range — <strong>{formatCurrency(last.itemPrice, ccy)}</strong> since {formatDate(last.observedAt)}. </>
+              : <>{inRange.length} price change{inRange.length === 1 ? '' : 's'} in this range. </>}
+            A price is recorded only when it changes; between changes the line holds the last price.{' '}
+            {lastSeen && (unchecked
+              ? <>This listing hasn&apos;t been re-checked since <strong>{formatDate(lastSeen)}</strong> — a monitor
+                re-checks only the listings its search returns on each run.</>
+              : <>Last checked {formatRelativeTime(lastSeen)}.</>)}
+          </span>
+        </div>
+      )}
+
+      {points.length === 0 && !history.isLoading ? (
         <Card>
-          <EmptyState icon={FiBarChart2} title="No price snapshots in this range"
-            message="Snapshots are recorded as the listing is refreshed. Try a wider range." />
+          <EmptyState icon={FiBarChart2} title="No price recorded for this listing"
+            message="A price is recorded the first time the listing is checked, and again whenever it changes." />
         </Card>
       ) : (
-        <ChartCard title="Price over time" subtitle="Item price vs landed price for the selected listing"
+        <ChartCard title="Price over time"
+          subtitle={before || inRange.length < points.length
+            ? 'Item price vs landed price — held flat between changes, from the range start to now'
+            : 'Item price vs landed price for the selected listing'}
           type="line" data={chart} loading={history.isLoading} height={320}
+          // A step, not a slope: the price stays what it was until the next
+          // recorded change, and a straight line between two points would
+          // invent prices that were never charged.
+          options={{ elements: { line: { stepped: 'after' } } }}
           // The CSV is the listing and range on screen, not everything ever
           // recorded — an export that ignores the filters is a different answer
           // from the chart above it.

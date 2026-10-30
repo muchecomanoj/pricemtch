@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FiInfo, FiAlertTriangle } from 'react-icons/fi'
+import StatusBadge from './StatusBadge'
 import { formatCurrency } from '../../utils/format'
 
 // Cells shared by the screens that render a marketplace listing: the two
@@ -23,6 +24,19 @@ export function ValueFlag({ status }) {
   if (!flag) return null
   const Icon = flag.icon
   return <Icon size={12} className={`${flag.cls} ms-1`} style={{ verticalAlign: 'baseline' }} title={flag.title} />
+}
+
+// Beside any price the backend flags as an estimate. The page reader sits
+// outside the storefront, so Amazon quotes it an import price that reads higher
+// than a local buyer pays — and someone may set their own price against it.
+// `note` is the backend's sentence, written to be shown as it is.
+export function EstimatedBadge({ estimated, note }) {
+  if (!estimated) return null
+  return (
+    <span className="ms-2" title={note || 'Estimated — not the price a local buyer pays.'}>
+      <StatusBadge status="ESTIMATED" label="Estimated" />
+    </span>
+  )
 }
 
 // Estimated margin at this listing's landed price.

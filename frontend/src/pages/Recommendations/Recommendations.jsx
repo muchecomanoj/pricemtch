@@ -30,7 +30,21 @@ const RISK_TONE = { LOW: 'success', MEDIUM: 'warning', HIGH: 'danger' }
 // recommendation currently waiting on a decision.
 const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PUBLISHED', 'REJECTED', 'EXPIRED']
 const PAST_TENSE = {
-  approve: 'approved', publish: 'published', reject: 'rejected', rollback: 'rolled back',
+  approve: 'approved', publish: 'published', approvePublish: 'approved and published',
+  reject: 'rejected', rollback: 'rolled back',
+}
+
+// One click for someone who can both authorise and apply a price: the two
+// existing steps in order. If the publish is refused (the cooldown, usually),
+// the approval stands and the error says so.
+async function approveThenPublish(id) {
+  await recommendationService.approve(id)
+  try {
+    return await recommendationService.publish(id)
+  } catch (e) {
+    e.approvedOnly = true
+    throw e
+  }
 }
 
 export default function Recommendations() {
@@ -84,7 +98,8 @@ export default function Recommendations() {
     mutationFn: ({ id, action }) => {
       if (action === 'approve') return recommendationService.approve(id)
       if (action === 'publish') return recommendationService.publish(id)
-    if (action === 'rollback') return recommendationService.rollback(id)
+      if (action === 'approvePublish') return approveThenPublish(id)
+      if (action === 'rollback') return recommendationService.rollback(id)
       return recommendationService.reject(id)
     },
     onSuccess: (_d, { action }) => {
@@ -92,13 +107,22 @@ export default function Recommendations() {
       refresh()
       // Publishing writes the recommended price onto the product, so anything
       // derived from ourPrice — margin, break-even, the KPI row — is now stale.
-      if (action === 'publish') {
+      if (action === 'publish' || action === 'approvePublish') {
         qc.invalidateQueries({ queryKey: ['product'] })
         qc.invalidateQueries({ queryKey: ['products'] })
         qc.invalidateQueries({ queryKey: ['profitability'] })
       }
     },
-    onError: (err) => notify.error(err?.message || 'Action failed.'),
+    onError: (err) => {
+      // Approved, then the publish was refused: keep the approval and say so,
+      // rather than reporting the whole action as failed.
+      if (err?.approvedOnly) {
+        notify.warn(`Approved, but not published yet: ${err.message}`)
+        refresh()
+        return
+      }
+      notify.error(err?.message || 'Action failed.')
+    },
   })
 
   // Rejecting is the one decision with no way back — there is no REJECTED→DRAFT
@@ -146,7 +170,7 @@ export default function Recommendations() {
               aria-label="Filter by status"
               onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
               {STATUSES.map((s) => (
-                <option key={s} value={s}>{s[0] + s.slice(1).toLowerCase()}</option>
+                <option key={s} value={s}>{s[0] + s.slice(1).toLowerCase().replace(/_/g, ' ')}</option>
               ))}
             </select>
           </div>
@@ -271,7 +295,8 @@ function RecommendationCard({ r, canManage, busy, onDecide }) {
 
       {r.rationale && <p className="text-muted small mb-3">{r.rationale}</p>}
 
-      {/* Actions follow the lifecycle: approve a DRAFT, publish an APPROVED.
+      {/* Actions follow the lifecycle: approve a DRAFT or a PENDING_APPROVAL
+          one (or approve and publish it in one go), publish an APPROVED.
           PUBLISHED / REJECTED / EXPIRED are terminal — nothing to act on. */}
       {canManage && r.rollbackable && (
         <div className="d-flex flex-wrap gap-2 mt-auto">
@@ -285,11 +310,15 @@ function RecommendationCard({ r, canManage, busy, onDecide }) {
         </div>
       )}
 
-      {canManage && ['DRAFT', 'APPROVED'].includes(r.status) && (
+      {canManage && ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(r.status) && (
         <div className="d-flex flex-wrap gap-2 mt-auto">
-          {r.status === 'DRAFT' && (
-            <Button write size="sm" variant="success" icon={FiCheck} disabled={busy}
-              onClick={() => onDecide('approve')}>Approve</Button>
+          {['DRAFT', 'PENDING_APPROVAL'].includes(r.status) && (
+            <>
+              <Button write size="sm" variant="success" icon={FiUploadCloud} disabled={busy}
+                onClick={() => onDecide('approvePublish')}>Approve &amp; publish</Button>
+              <Button write size="sm" variant="light" icon={FiCheck} disabled={busy}
+                onClick={() => onDecide('approve')}>Approve</Button>
+            </>
           )}
           {r.status === 'APPROVED' && (
             <Button write size="sm" variant="success" icon={FiUploadCloud} disabled={busy}

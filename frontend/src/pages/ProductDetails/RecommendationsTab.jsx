@@ -11,7 +11,22 @@ import { useNotification } from '../../context/NotificationContext'
 import { money, pctOf, Stat } from './shared'
 import { formatRelativeTime } from '../../utils/format'
 
-const PAST_TENSE = { rollback: 'rolled back', submit: 'submitted for approval', approve: 'approved', publish: 'published', reject: 'rejected' }
+const PAST_TENSE = {
+  rollback: 'rolled back', submit: 'submitted for approval', approve: 'approved',
+  publish: 'published', approvePublish: 'approved and published', reject: 'rejected',
+}
+
+// One click for someone who can both authorise and apply a price: the two
+// existing steps in order. If the publish is refused, the approval stands.
+async function approveThenPublish(id) {
+  await productIntelService.approveRecommendation(id)
+  try {
+    return await productIntelService.publishRecommendation(id)
+  } catch (e) {
+    e.approvedOnly = true
+    throw e
+  }
+}
 
 // GET/POST /products/{id}/price-recommendations + approve / publish / reject
 export default function RecommendationsTab({
@@ -42,6 +57,7 @@ export default function RecommendationsTab({
       if (action === 'submit') return productIntelService.submitRecommendation(id)
       if (action === 'approve') return productIntelService.approveRecommendation(id)
       if (action === 'publish') return productIntelService.publishRecommendation(id)
+      if (action === 'approvePublish') return approveThenPublish(id)
       if (action === 'rollback') return productIntelService.rollbackRecommendation(id)
       return productIntelService.rejectRecommendation(id)
     },
@@ -50,7 +66,7 @@ export default function RecommendationsTab({
       refresh()
       // Publishing writes the price onto the product, so the hero KPIs and every
       // profit figure derived from ourPrice need refetching.
-      if (action === 'publish' || action === 'rollback') {
+      if (action === 'publish' || action === 'approvePublish' || action === 'rollback') {
         qc.invalidateQueries({ queryKey: ['product', productId] })
         qc.invalidateQueries({ queryKey: ['profitability', productId] })
       }
@@ -59,7 +75,17 @@ export default function RecommendationsTab({
     // for a person to read, so it is shown as-is — and the recommendation is
     // NOT consumed by the refusal: it stays approved and publishable later, so
     // nothing here disables the button.
-    onError: (err) => notify.error(err?.message || 'Action failed.'),
+    onError: (err) => {
+      // Approve & publish got halfway: approved, then the publish was refused
+      // (the cooldown, usually). Approved is a real state worth keeping, so it
+      // is said as such and the list shows it ready to publish later.
+      if (err?.approvedOnly) {
+        notify.warn(`Approved, but not published yet: ${err.message}`)
+        refresh()
+        return
+      }
+      notify.error(err?.message || 'Action failed.')
+    },
   })
 
   // No REJECTED→DRAFT transition exists, so confirm before discarding.
@@ -169,15 +195,21 @@ export default function RecommendationsTab({
 
                 {canManagePricing && (
                   <div className="d-flex flex-wrap gap-2 mt-2">
-                    {/* A draft is sent for approval before anyone can
-                        authorise it — the two are different decisions. */}
+                    {/* Whoever can authorise a price can approve it straight
+                        from draft, or approve and apply it in one go. Submit
+                        for approval stays for teams where someone else signs
+                        off: it puts the draft in the pending queue. */}
+                    {['DRAFT', 'PENDING_APPROVAL'].includes(r.status) && (
+                      <>
+                        <Button write size="sm" icon={FiUploadCloud} loading={act.isPending}
+                          onClick={() => onAction(r.id, 'approvePublish')}>Approve &amp; publish</Button>
+                        <Button write size="sm" variant="light" icon={FiCheck} loading={act.isPending}
+                          onClick={() => onAction(r.id, 'approve')}>Approve</Button>
+                      </>
+                    )}
                     {r.status === 'DRAFT' && (
                       <Button write size="sm" variant="light" loading={act.isPending}
                         onClick={() => onAction(r.id, 'submit')}>Submit for approval</Button>
-                    )}
-                    {r.status === 'PENDING_APPROVAL' && (
-                      <Button write size="sm" icon={FiCheck} loading={act.isPending}
-                        onClick={() => onAction(r.id, 'approve')}>Approve</Button>
                     )}
                     {/* Only when the backend says the publish can be undone.
                         Rolling back ends the record REJECTED with rolledBackAt

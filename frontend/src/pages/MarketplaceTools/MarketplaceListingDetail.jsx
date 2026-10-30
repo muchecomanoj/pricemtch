@@ -10,7 +10,7 @@ import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import Loader from '../../components/common/Loader'
 import StatusBadge from '../../components/common/StatusBadge'
-import { ItemIdentifiers } from '../../components/common/ListingCells'
+import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
 import CompetingSellers from '../../components/common/CompetingSellers'
 import EbayOtherSellers from '../../components/common/EbayOtherSellers'
 import ItemPriceHistory from '../../components/common/ItemPriceHistory'
@@ -110,11 +110,15 @@ export default function MarketplaceListingDetail() {
   const headlinePrice = shown ? shown.price : d.price
   const viewUrl = shown?.url || d.url
   const priceView = price
-  const priceCurrency = currency
+  // The price read's own currency: the reader can answer from another storefront
+  // than the one asked for, and the two reads are made separately.
+  const priceCurrency = price?.currency || currency
+  // Before the live read is in, the headline is the search result's own price.
+  const headlineFlags = shown || d
   // The saved price and the live one now come from the same storefront
   // whenever the page was opened from a row that knew it, so a difference is a
   // real price move rather than two countries being compared.
-  const sameShop = Boolean(tracked?.storefront && resolved && tracked.storefront === resolved)
+  const sameShop = Boolean(tracked?.storefront && liveCode && tracked.storefront === liveCode)
 
   if (detailQ.isLoading && !seed) return <Loader label="Loading listing…" />
 
@@ -174,6 +178,7 @@ export default function MarketplaceListingDetail() {
               ) : (
                 <span className="h4 fw-bold mb-0">
                   {headlinePrice != null ? formatCurrency(headlinePrice, shownCurrency) : '—'}
+                  {headlinePrice != null && <EstimatedBadge estimated={headlineFlags.priceEstimated} note={headlineFlags.priceNote} />}
                 </span>
               )}
               {/* Only once a live read is in — until then `d` is the search
@@ -200,8 +205,19 @@ export default function MarketplaceListingDetail() {
                 <span>{readError}</span>
               </div>
             )}
+            {/* Under the figure as well as in the badge's tooltip: it also says
+                when another storefront answered than the one asked for. */}
+            {!reading && headlineFlags.priceNote && (
+              <div className="field-note field-note--warn mt-2" style={{ maxWidth: 'none' }}>
+                <FiAlertTriangle size={15} />
+                <span>{headlineFlags.priceNote}</span>
+              </div>
+            )}
             {(shown?.sourceTimestamp || d.sourceTimestamp) && (
-              <div className="form-text mt-1">Fetched {formatDate(shown?.sourceTimestamp || d.sourceTimestamp)}.</div>
+              <div className="form-text mt-1">
+                Fetched {formatDate(shown?.sourceTimestamp || d.sourceTimestamp)}.
+                {shown?.source === 'PAGE_READER' && ' Read from the public product page.'}
+              </div>
             )}
             {shown && !reading && (
               <SavedPriceNote live={shown} tracked={tracked} mp={MP} currency={shownCurrency} sameShop={sameShop} />
@@ -220,10 +236,14 @@ export default function MarketplaceListingDetail() {
               )
                 : (
                   <div className="d-flex flex-column gap-2">
-                    <Row label="Item price" value={priceView?.itemPrice != null ? formatCurrency(priceView.itemPrice, priceCurrency) : '—'} strong />
+                    <Row label="Item price" strong value={priceView?.itemPrice != null
+                      ? <>{formatCurrency(priceView.itemPrice, priceCurrency)}<EstimatedBadge estimated={priceView.priceEstimated} note={priceView.priceNote} /></>
+                      : '—'} />
                     <Row label="Shipping" value={priceView?.shipping != null ? formatCurrency(priceView.shipping, priceCurrency) : '—'} icon={FiTruck} />
                     <hr className="my-1" />
-                    <Row label="Landed price" value={priceView?.landedPrice != null ? formatCurrency(priceView.landedPrice, priceCurrency) : '—'} strong big />
+                    <Row label="Landed price" strong big value={priceView?.landedPrice != null
+                      ? <>{formatCurrency(priceView.landedPrice, priceCurrency)}<EstimatedBadge estimated={priceView.priceEstimated} note={priceView.priceNote} /></>
+                      : '—'} />
                     {/* Amazon publishes a price only for the offer that holds
                         the Buy Box. With no winner — nothing in stock, or only
                         third-party offers Amazon will not feature — there is no

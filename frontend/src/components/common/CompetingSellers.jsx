@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { FiUsers, FiAward, FiTruck, FiStar } from 'react-icons/fi'
+import { FiUsers, FiAward, FiTruck, FiStar, FiInfo } from 'react-icons/fi'
 import Card from './Card'
 import Loader from './Loader'
 import EmptyState from './EmptyState'
 import { marketplaceService } from '../../services/marketplaceService'
-import { ItemIdentifiers } from './ListingCells'
+import { ItemIdentifiers, EstimatedBadge } from './ListingCells'
 import { shortItemId, marketplaceErrorText } from '../../utils/marketplaces'
 import { formatCurrency } from '../../utils/format'
 
@@ -50,7 +50,11 @@ export default function CompetingSellers({ mp, itemId, identifiers, currency = '
     if (a.buyBox !== b.buyBox) return a.buyBox ? -1 : 1
     return (landed(a) ?? Infinity) - (landed(b) ?? Infinity)
   })
-  const s = stats(offers)
+  // Set when the public product page was read, which names only the Buy Box
+  // winner. One row then says nothing about how many sellers there are, so the
+  // note goes above the table and the lowest/median/highest line is dropped.
+  const offersNote = offers.find((o) => o.priceNote)?.priceNote
+  const s = offersNote ? null : stats(offers)
 
   // Only Amazon shares one listing between sellers, so it is the only place
   // this panel can have an answer. eBay returns a payload we cannot parse into
@@ -106,6 +110,12 @@ export default function CompetingSellers({ mp, itemId, identifiers, currency = '
                      offer — out of stock, or sold only by one merchant — reports nothing here." />
         ) : (
           <>
+            {offersNote && (
+              <div className="field-note mb-3" style={{ maxWidth: 'none' }}>
+                <FiInfo size={15} />
+                <span>{offersNote}</span>
+              </div>
+            )}
             {s && (
               <div className="d-flex flex-wrap gap-4 mb-3 small">
                 <span>Lowest <strong>{formatCurrency(s.lowest, currency)}</strong></span>
@@ -151,6 +161,7 @@ export default function CompetingSellers({ mp, itemId, identifiers, currency = '
                       </td>
                       <td className="text-nowrap">
                         {o.price != null ? formatCurrency(o.price, o.currency || currency) : '—'}
+                        <EstimatedBadge estimated={o.priceEstimated} note={o.priceNote} />
                         {o.shipping > 0 && (
                           <div className="text-muted" style={{ fontSize: 11 }}>
                             + {formatCurrency(o.shipping, o.currency || currency)} delivery

@@ -7,8 +7,8 @@ import {
 import Button from '../../components/common/Button'
 import AttachToProductModal from '../MarketplaceTools/AttachToProductModal'
 import SaveAsProductModal from '../../components/products/SaveAsProductModal'
-import { ItemIdentifiers } from '../../components/common/ListingCells'
-import { shortItemId } from '../../utils/marketplaces'
+import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
+import { shortItemId, listingPath } from '../../utils/marketplaces'
 import { scoreTone } from '../../utils/listingToProduct'
 import { useAuth } from '../../context/AuthContext'
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
@@ -147,7 +147,12 @@ export function JudgedRow({ r, onSave, onAddToCatalog, onFindSimilar, similarBus
               missing, and the reason is worth stating rather than leaving a
               blank that reads as a fault. */}
           {r.price != null
-            ? <strong>{formatCurrency(r.price, r.currency || 'USD')}</strong>
+            ? (
+              <>
+                <strong>{formatCurrency(r.price, r.currency || 'USD')}</strong>
+                <EstimatedBadge estimated={r.priceEstimated} note={r.priceNote} />
+              </>
+            )
             : (
               <span className="text-muted small"
                 title="Amazon prices by the visitor's location, so this storefront quotes an import price rather than its shelf price.">
@@ -239,7 +244,7 @@ export function JudgedRow({ r, onSave, onAddToCatalog, onFindSimilar, similarBus
               // can be. The several sellers competing ON it live on the detail
               // page — named here so nobody reads one card as "one competitor".
               title="Price history, competing sellers and fees for this listing"
-              to={`/marketplace-tools/${String(r.marketplace).toLowerCase()}/${encodeURIComponent(r.marketplaceItemId)}`}>
+              to={listingPath(r.marketplace, r.marketplaceItemId, r.storefront)}>
               Sellers &amp; history <FiArrowRight />
             </Link>
           )}

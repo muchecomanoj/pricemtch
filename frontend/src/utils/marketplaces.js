@@ -14,6 +14,15 @@ const MP_LABEL = { AMAZON: 'Amazon', EBAY: 'eBay', KEEPA: 'Amazon (Keepa)', WALM
 //
 // A non-zero variation is kept, because "which variant" changes what the price
 // refers to and silently dropping it would make two different rows look alike.
+// The listing detail page for one marketplace item. The storefront travels with
+// it: the page reads from that country's shop, and without it a listing found
+// on amazon.co.uk was looked for only in the US and Canada and reported "not
+// found in any configured marketplace".
+export function listingPath(marketplace, itemId, storefront) {
+  const base = `/marketplace-tools/${String(marketplace).toLowerCase()}/${encodeURIComponent(itemId)}`
+  return storefront ? `${base}?storefront=${encodeURIComponent(storefront)}` : base
+}
+
 export function shortItemId(id) {
   if (typeof id !== 'string') return id
   const m = /^v\d+\|([^|]+)\|(\d+)$/.exec(id)
@@ -52,11 +61,10 @@ export const REGIONS = [
 // SP-API, because this account is only authorised for US and CA.
 //
 // Two consequences, both visible: the read takes about twenty seconds instead
-// of two, and it often comes back with no price at all. Amazon prices by the
-// visitor's location, so a reader sitting in India is quoted an import price
-// in rupees — Amazon's own docs call the converted figure an estimate, not the
-// shelf price, so the backend omits it rather than publish a number that is
-// wrong by the cost of international shipping and duty.
+// of two, and the price is not the shelf price. Amazon prices by the visitor's
+// location, so a reader sitting in India is quoted an import price in rupees.
+// The backend converts it and flags it with priceEstimated and priceNote, which
+// EstimatedBadge shows beside the figure.
 const SCRAPED_REGIONS = new Set(['GB', 'DE', 'IN'])
 export const isScrapedRegion = (code) => SCRAPED_REGIONS.has(String(code || '').toUpperCase())
 
