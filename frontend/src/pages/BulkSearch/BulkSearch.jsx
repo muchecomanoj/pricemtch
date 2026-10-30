@@ -15,6 +15,7 @@ import BulkRow from './BulkRow'
 import { bulkSearchService, RUNNING } from '../../services/bulkSearchService'
 import { useDestination } from '../../hooks/useDestination'
 import { formatDateTime } from '../../utils/format'
+import { storefrontLabel } from '../../utils/marketplaces'
 
 const PAGE_SIZE = 25
 
@@ -30,6 +31,14 @@ const OUTCOMES = [
   ['NOT_JUDGED', 'Not reviewed'],
   ['ERROR', 'Failed'],
 ]
+
+// "competitor pricing.xlsx · United Kingdom". Jobs from before the region
+// existed have none, and the name stands alone.
+const jobName = (j, fallback) => {
+  const name = j?.fileName || fallback
+  const place = j?.region && storefrontLabel({ countryCode: j.region })
+  return place ? `${name} · ${place}` : name
+}
 
 const JOB_TONE = {
   COMPLETED: 'green', COMPLETED_WITH_ERRORS: 'orange',
@@ -115,7 +124,7 @@ export default function BulkSearch() {
                     <div className="flex-grow-1" style={{ minWidth: 0 }}>
                       <div className="d-flex align-items-center flex-wrap gap-2">
                         <span className={`mr-pill mr-pill--${JOB_TONE[j.status] || 'slate'}`}>{j.status}</span>
-                        <span className="fw-semibold">{j.fileName || `Job #${j.id}`}</span>
+                        <span className="fw-semibold">{jobName(j, `Job #${j.id}`)}</span>
                       </div>
                       <div className="text-muted small mt-1">
                         {j.totalRows} row{j.totalRows === 1 ? '' : 's'}
@@ -133,7 +142,7 @@ export default function BulkSearch() {
         <>
           {/* ── Progress ─────────────────────────────────────────── */}
           <Card className="mb-3"
-            title={job?.fileName || `Job #${jobId}`}
+            title={jobName(job, `Job #${jobId}`)}
             subtitle={job?.judge === false ? 'AI review was skipped — every listing needs checking by hand' : undefined}
             actions={job && (
               <span className={`mr-pill mr-pill--${JOB_TONE[job.status] || 'slate'}`}>{job.status}</span>

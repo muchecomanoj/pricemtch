@@ -32,6 +32,7 @@ function inputSummary(r) {
   return [
     ['SKU', r.inputSku], ['ASIN', r.inputAsin], ['UPC', r.inputUpc],
     ['EAN', r.inputEan], ['GTIN', r.inputGtin], ['MPN', r.inputMpn],
+    ['Region', r.inputRegion],
   ].filter(([, v]) => v)
 }
 

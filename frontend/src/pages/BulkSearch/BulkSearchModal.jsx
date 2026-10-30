@@ -4,6 +4,7 @@ import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import { bulkSearchService } from '../../services/bulkSearchService'
 import { useNotification } from '../../context/NotificationContext'
+import { REGIONS, isScrapedRegion } from '../../utils/marketplaces'
 
 // Starting a bulk search.
 //
@@ -17,6 +18,9 @@ import { useNotification } from '../../context/NotificationContext'
 // how someone ends up sitting on a progress bar waiting for it to hurry up.
 const ROWS_PER_MIN = 3
 const MAX_ROWS = 500
+// As on the search form: without a region, a UK-only file is looked for in the
+// US and Canada, and every row comes back "Nothing matched".
+const DEFAULT_REGION = 'US'
 
 function estimate(rows) {
   const mins = Math.ceil(rows / ROWS_PER_MIN)
@@ -46,11 +50,12 @@ export default function BulkSearchModal({ show, onClose, destination, onStarted 
   const { notify } = useNotification()
   const [file, setFile] = useState(null)
   const [rowCount, setRowCount] = useState(null)
+  const [region, setRegion] = useState(DEFAULT_REGION)
   const [judge, setJudge] = useState(true)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!show) { setFile(null); setRowCount(null); setJudge(true); setBusy(false) }
+    if (!show) { setFile(null); setRowCount(null); setRegion(DEFAULT_REGION); setJudge(true); setBusy(false) }
   }, [show])
 
   const pick = async (f) => {
@@ -66,6 +71,7 @@ export default function BulkSearchModal({ show, onClose, destination, onStarted 
     try {
       const job = await bulkSearchService.start(file, {
         judge,
+        region,
         country: destination?.country || undefined,
         postalCode: destination?.postalCode || undefined,
       })
@@ -101,6 +107,24 @@ export default function BulkSearchModal({ show, onClose, destination, onStarted 
         Same columns as the product import: sku, title, brand, asin, upc, ean, gtin, mpn.
         Headers are detected automatically.
       </div>
+
+      <label className="form-label mt-3">Region</label>
+      <select className="form-select" value={region} onChange={(e) => setRegion(e.target.value)}>
+        {REGIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+      <div className="form-text">
+        The storefront to search for every row. For a file that mixes countries, add a region
+        column: a row&apos;s own region overrides this one.
+      </div>
+      {isScrapedRegion(region) && (
+        <div className="field-note field-note--warn mt-2" style={{ maxWidth: 'none' }}>
+          <FiAlertTriangle size={15} />
+          <span>
+            Amazon is read from its public product pages in this region. Rows take longer, and
+            prices are estimates or may be missing.
+          </span>
+        </div>
+      )}
 
       {file && (
         <div className={`field-note ${tooBig ? 'field-note--warn' : ''} mt-3`} style={{ maxWidth: 'none' }}>

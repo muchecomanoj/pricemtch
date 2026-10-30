@@ -33,14 +33,21 @@ export function parseListings(raw) {
 
 export const bulkSearchService = {
   // POST /search/bulk — returns 202 with the job; it does not wait.
-  async start(file, { judge = true, country, postalCode } = {}) {
+  // `region` is the storefront to search, for the whole file. A row with its own
+  // region column overrides it. `country` is only where eBay delivers to.
+  async start(file, { judge = true, region, country, postalCode } = {}) {
     if (USE_MOCK) return { id: 0, status: 'PENDING', totalRows: 0 }
     const form = new FormData()
     form.append('file', file)
     const { data } = await api.post(ENDPOINTS.bulkSearch.root, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       // Destination rides as query params here, not in the body.
-      params: { judge, country: country || undefined, postalCode: postalCode || undefined },
+      params: {
+        judge,
+        region: region || undefined,
+        country: country || undefined,
+        postalCode: postalCode || undefined,
+      },
     })
     return data
   },
