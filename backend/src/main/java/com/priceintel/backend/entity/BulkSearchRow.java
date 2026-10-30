@@ -66,6 +66,15 @@ public class BulkSearchRow extends BaseEntity {
     @Column(name = "input_mpn", length = 100)
     private String inputMpn;
 
+    /**
+     * The storefront this row's own Region column named, already normalised.
+     *
+     * <p>For a file that mixes countries. Null means the row follows the job's
+     * region, which is the ordinary case.</p>
+     */
+    @Column(name = "input_region", length = 5)
+    private String inputRegion;
+
     // ---- what happened ----
 
     @Column(name = "resolved_query", length = 500)

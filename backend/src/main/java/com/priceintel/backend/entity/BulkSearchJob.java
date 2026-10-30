@@ -65,6 +65,21 @@ public class BulkSearchJob extends BaseEntity {
     @Builder.Default
     private boolean judge = true;
 
+    /**
+     * Which country's storefront to search, as an ISO code — {@code US},
+     * {@code GB}, {@code IN}.
+     *
+     * <p>Distinct from {@link #destinationCountry}, which is where the goods
+     * ship to. This chooses whose catalogue is searched; that one prices the
+     * delivery. A file of UK products searched in the US catalogue is not a
+     * delivery problem — it finds nothing at all.</p>
+     *
+     * <p>Null means no preference, which is what every job before this column
+     * did: the planner searches the marketplaces it is authorised for.</p>
+     */
+    @Column(length = 5)
+    private String region;
+
     @Column(name = "destination_country", length = 2)
     private String destinationCountry;
 

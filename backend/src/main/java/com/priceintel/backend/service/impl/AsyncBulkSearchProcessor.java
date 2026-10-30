@@ -158,6 +158,10 @@ public class AsyncBulkSearchProcessor {
                     .title(row.getInputTitle())
                     .brand(row.getInputBrand())
                     .judge(job.isJudge())
+                    // The row wins when its own Region column named one, so a
+                    // file that mixes countries searches each row where it is
+                    // actually sold.
+                    .region(row.getInputRegion() != null ? row.getInputRegion() : job.getRegion())
                     .destination(destination)
                     .maxResults(12)
                     .build();

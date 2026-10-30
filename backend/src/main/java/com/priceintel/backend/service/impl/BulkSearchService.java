@@ -45,6 +45,7 @@ import com.priceintel.backend.utils.IdentifierNormalizer;
 import com.priceintel.backend.security.TenantContext;
 import com.priceintel.backend.service.ProductService;
 import com.priceintel.backend.utils.SpreadsheetParser;
+import com.priceintel.backend.utils.Storefront;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -83,16 +84,35 @@ public class BulkSearchService {
 
     // ---------- starting a job ----------
 
+    /**
+     * Header aliases for the per-row Region column.
+     *
+     * <p>Kept here rather than in {@link ImportFieldCatalog} because that
+     * catalogue is shared with the product import, where {@code country} already
+     * means country of origin. A column saying where a product was made must not
+     * decide which storefront is searched.</p>
+     */
+    private static final Set<String> REGION_ALIASES = Set.of(
+            "region", "searchregion", "storefront", "marketplaceregion", "countrycode");
+
     @Transactional
     public BulkSearchJob start(MultipartFile file, boolean judge, Destination destination) {
+        return start(file, judge, destination, null);
+    }
+
+    @Transactional
+    public BulkSearchJob start(MultipartFile file, boolean judge, Destination destination,
+            String region) {
         ImportFileType type = detectFileType(file);
         List<Map<String, String>> rows;
         Map<String, String> mapping;
+        List<String> headers;
         try {
             com.priceintel.backend.utils.ParsedSheet sheet =
                     SpreadsheetParser.parse(file.getBytes(), type);
             rows = sheet.getRows();
-            mapping = autoMap(sheet.getHeaders());
+            headers = sheet.getHeaders();
+            mapping = autoMap(headers);
         } catch (Exception e) {
             throw new BadRequestException("Could not read that file: " + e.getMessage());
         }
@@ -110,12 +130,16 @@ public class BulkSearchService {
                     + "or at least one of: asin, upc, ean, gtin, mpn.");
         }
 
+        String jobRegion = normalisedRegion(region, "region");
+        String regionHeader = regionHeaderIn(headers);
+
         BulkSearchJob job = jobRepo.save(BulkSearchJob.builder()
                 .tenantId(TenantContext.getTenantId())
                 .fileName(file.getOriginalFilename())
                 .fileType(type)
                 .status(BulkSearchJob.Status.PENDING)
                 .judge(judge)
+                .region(jobRegion)
                 .destinationCountry(destination == null ? null : destination.normalisedCountry())
                 .destinationPostalCode(destination == null ? null : destination.normalisedPostalCode())
                 .totalRows(rows.size())
@@ -137,12 +161,18 @@ public class BulkSearchService {
                     .inputEan(value(row, mapping, "ean"))
                     .inputGtin(value(row, mapping, "gtin"))
                     .inputMpn(value(row, mapping, "mpn"))
+                    // A bad code here fails the upload rather than being
+                    // ignored: a row quietly searched in the wrong country comes
+                    // back "not found", which reads as a fact about the product.
+                    .inputRegion(regionHeader == null ? null
+                            : normalisedRegion(row.get(regionHeader), "region in row " + (i + 2)))
                     .status(BulkSearchRow.Status.PENDING)
                     .build());
         }
         rowRepo.saveAll(toSave);
 
-        log.info("Queued bulk search job {} — {} row(s), judge={}", job.getId(), rows.size(), judge);
+        log.info("Queued bulk search job {} — {} row(s), judge={}, region={}",
+                job.getId(), rows.size(), judge, jobRegion == null ? "any" : jobRegion);
         startAfterCommit(job.getId());
         return job;
     }
@@ -728,6 +758,43 @@ public class BulkSearchService {
             }
         }
         return mapping;
+    }
+
+    /**
+     * The file's Region column, or null when it has none.
+     *
+     * <p>Matched outside {@link #autoMap} so that the product import's
+     * {@code country} alias — country of origin — cannot be read as a
+     * storefront.</p>
+     */
+    private String regionHeaderIn(List<String> headers) {
+        for (String header : headers) {
+            if (REGION_ALIASES.contains(ImportFieldCatalog.normalizeKey(header))) {
+                return header;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A region as the rest of the system spells it, or null when none was given.
+     *
+     * <p>Rejected rather than defaulted when it is not a country: {@code UKK}
+     * silently becoming the US default would search the wrong catalogue for
+     * every row in the file and report the results as the truth.</p>
+     *
+     * @param where what to name in the error — "region", or the row number
+     */
+    private String normalisedRegion(String region, String where) {
+        if (region == null || region.isBlank()) {
+            return null;
+        }
+        String code = Storefront.normalise(region);
+        if (code == null) {
+            throw new BadRequestException("Unknown " + where + ": " + region.trim()
+                    + ". Use a two-letter country code such as US, CA or GB.");
+        }
+        return code;
     }
 
     private boolean hasAnyIdentifierColumn(Map<String, String> mapping) {
