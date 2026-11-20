@@ -56,7 +56,7 @@ public class RecommendationService {
         // Break-even from the cost profile (price-independent). Null if no costs.
         BigDecimal probePrice = competitorMedian != null ? competitorMedian : BigDecimal.valueOf(100);
         ProfitabilityResponse probe = costService.computeProfitability(productId, probePrice);
-        boolean hasCosts = probe.isCostProfileConfigured();
+        boolean hasCosts = hasRealCosts(probe);
         BigDecimal breakEven = hasCosts ? probe.getBreakEvenPrice() : null;
 
         if (competitorMedian == null && !hasCosts) {
@@ -95,7 +95,11 @@ public class RecommendationService {
         candidate = bounded.price();
 
         ProfitabilityResponse atCandidate = costService.computeProfitability(productId, candidate);
-        BigDecimal expectedMargin = atCandidate.getContributionMarginPct();
+        // Only when there is something to subtract. An empty profile yields a
+        // break-even of zero and therefore a margin of 100%, which is not a
+        // healthy margin — it is a missing cost wearing the look of good news,
+        // and it is the figure someone reads before setting a price.
+        BigDecimal expectedMargin = hasCosts ? atCandidate.getContributionMarginPct() : null;
 
         // Confirmed matches counted separately from unreviewed candidates.
         MarketPricesResponse confirmed = searchService.marketPrices(productId, true);
@@ -377,8 +381,43 @@ public class RecommendationService {
         if (!ok) {
             throw new BadRequestException("Cannot " + action + " a recommendation in state " + rec.getStatus());
         }
+        // Rejecting an expired one is always allowed — saying no to a stale
+        // price is never the unsafe direction.
+        if (to != RecommendationStatus.REJECTED && isExpired(rec)) {
+            throw new BadRequestException("This recommendation expired on " + rec.getExpiresAt()
+                    + " and cannot be " + pastTense(action) + ". It was worked out from competitor "
+                    + "prices as they were then, which have since moved. Generate a new one.");
+        }
         rec.setStatus(to);
         return toResponse(repo.save(rec));
+    }
+
+    /**
+     * Whether this recommendation is too old to act on.
+     *
+     * <p>{@code expiresAt} was written at generation and then read by nothing:
+     * a card could say "expired 3 weeks ago" while all of its buttons still
+     * worked, and publishing one set today's selling price from month-old
+     * competitor data. A price the business charges is exactly the thing that
+     * must not be decided by a forgotten draft.</p>
+     *
+     * <p>Already-published and rejected recommendations are never "expired" —
+     * they are finished, and their dates are history rather than a deadline.</p>
+     */
+    private boolean isExpired(PriceRecommendation rec) {
+        return rec.getExpiresAt() != null
+                && rec.getStatus() != RecommendationStatus.PUBLISHED
+                && rec.getStatus() != RecommendationStatus.REJECTED
+                && rec.getExpiresAt().isBefore(LocalDate.now());
+    }
+
+    private String pastTense(String action) {
+        return switch (action) {
+            case "submit" -> "submitted";
+            case "approve" -> "approved";
+            case "publish" -> "published";
+            default -> action + "ed";
+        };
     }
 
     private BigDecimal clamp(BigDecimal price, RecommendationRequest r) {
@@ -415,6 +454,21 @@ public class RecommendationService {
         return BigDecimal.valueOf(Math.min(c, 95));
     }
 
+    /**
+     * Whether the cost profile actually holds costs.
+     *
+     * <p>Distinct from "a profile exists". Product 94 had one saved with every
+     * field zero, so break-even came out at 0.00 and the margin at 100% — and
+     * the recommendation screen reported a perfect margin on a product whose
+     * costs nobody had entered. A saved-but-empty profile is the same state as
+     * no profile, and has to be treated as one.</p>
+     */
+    private boolean hasRealCosts(ProfitabilityResponse p) {
+        return p.isCostProfileConfigured()
+                && p.getBreakEvenPrice() != null
+                && p.getBreakEvenPrice().signum() > 0;
+    }
+
     private String rationale(BigDecimal price, BigDecimal median, BigDecimal breakEven,
                              BigDecimal margin, int competitors, BigDecimal targetMargin) {
         StringBuilder sb = new StringBuilder();
@@ -430,7 +484,8 @@ public class RecommendationService {
             sb.append(". Expected contribution margin ~").append(margin).append("%")
               .append(" (target ").append(targetMargin).append("%).");
         } else {
-            sb.append(". Add a cost profile to see the expected margin.");
+            sb.append(". No costs are recorded for this product, so the margin cannot be "
+                    + "worked out and this price is set on competitors alone.");
         }
         // A single competitor makes "median" a grand word for "their price".
         // Saying so stops the figure being read as a market consensus.
@@ -458,6 +513,9 @@ public class RecommendationService {
                 .expectedMarginPct(rec.getExpectedMarginPct()).breakEvenPrice(rec.getBreakEvenPrice())
                 .competitorMedian(rec.getCompetitorMedian()).confidence(rec.getConfidence())
                 .rationale(rec.getRationale()).status(rec.getStatus().name())
+                // Derived rather than stored, so a draft becomes expired by the
+                // date passing rather than by something having to run.
+                .expired(isExpired(rec))
                 .expiresAt(rec.getExpiresAt()).createdAt(rec.getCreatedAt())
                 .unboundedPrice(rec.getUnboundedPrice()).boundApplied(rec.getBoundApplied())
                 .previousPrice(rec.getPreviousPrice())

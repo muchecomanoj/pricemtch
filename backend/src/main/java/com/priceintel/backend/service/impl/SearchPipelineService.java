@@ -368,6 +368,150 @@ public class SearchPipelineService {
         }
     }
 
+    /** What a re-check pass did, for the monitor to report. */
+    public record RecheckOutcome(int rechecked, int gone, int failed) {
+
+        static final RecheckOutcome NONE = new RecheckOutcome(0, 0, 0);
+
+        /** A sentence for the monitor's status line, or null when nothing was due. */
+        public String summary() {
+            if (rechecked == 0 && gone == 0 && failed == 0) {
+                return null;
+            }
+            StringBuilder s = new StringBuilder(rechecked + " re-checked");
+            if (gone > 0) {
+                s.append(" · ").append(gone).append(" no longer listed");
+            }
+            if (failed > 0) {
+                s.append(" · ").append(failed).append(" could not be read");
+            }
+            return s.toString();
+        }
+    }
+
+    /**
+     * Re-prices the product's attached listings that this run's search did not
+     * return.
+     *
+     * <p>A monitor searches and refreshes its top handful of results. Everything
+     * else attached to the product simply ages: one product had 42 listings, 33
+     * of which had gone unchecked for weeks while the Competitors tab showed
+     * their old prices without saying how old. Those listings are looked up
+     * directly by item id here, which is cheaper than a search and answers for
+     * exactly the listing in question.</p>
+     *
+     * <p>Capped per run and taken oldest-first, so a product with 300 listings
+     * spends a bounded amount of quota and the remainder rotate into the next
+     * run rather than being dropped.</p>
+     *
+     * <p>A listing that has ended is marked unavailable rather than counted as a
+     * failure: "this seller stopped offering it" is an answer about the market,
+     * and burying it in an error count would hide a real competitor leaving.</p>
+     *
+     * @param notSeenSince listings last seen before this are stale — pass the
+     *                     instant the run's search started
+     */
+    @Transactional
+    public RecheckOutcome recheckAttachedListings(Long productId, Instant notSeenSince, int limit) {
+        if (limit <= 0) {
+            return RecheckOutcome.NONE;
+        }
+        List<CompetitorListing> stale = listingRepo.findStaleForProduct(
+                productId, notSeenSince, org.springframework.data.domain.PageRequest.of(0, limit));
+        if (stale.isEmpty()) {
+            return RecheckOutcome.NONE;
+        }
+
+        int rechecked = 0;
+        int gone = 0;
+        int failed = 0;
+        for (CompetitorListing listing : stale) {
+            Marketplace mp;
+            try {
+                mp = Marketplace.valueOf(listing.getMarketplace());
+            } catch (IllegalArgumentException e) {
+                failed++;
+                continue;
+            }
+            try {
+                var price = marketplaceService.getPrice(
+                        mp, listing.getMarketplaceItemId(), listing.getStorefront());
+                if (price == null || price.getItemPrice() == null) {
+                    markGone(listing);
+                    gone++;
+                } else {
+                    apply(listing, mp, price);
+                    rechecked++;
+                }
+            } catch (ResourceNotFoundException e) {
+                // The marketplace says the item is not there any more.
+                markGone(listing);
+                gone++;
+            } catch (Exception e) {
+                // One unreachable listing must not end the pass: the rest of the
+                // product's competitors are still worth re-pricing.
+                log.warn("Could not re-check {} {} {} for product {}: {}", mp,
+                        listing.getStorefront(), listing.getMarketplaceItemId(), productId,
+                        e.getMessage());
+                failed++;
+            }
+        }
+        log.info("Re-checked {} listing(s) for product {} — {} priced, {} gone, {} unreadable",
+                stale.size(), productId, rechecked, gone, failed);
+        return new RecheckOutcome(rechecked, gone, failed);
+    }
+
+    /** Stores a fresh price for a listing the search did not return. */
+    private void apply(CompetitorListing listing, Marketplace mp,
+            com.priceintel.backend.marketplace.model.PriceSnapshot price) {
+        Instant now = Instant.now();
+        boolean moved = priceMoved(mp, listing.getStorefront(), listing.getMarketplaceItemId(),
+                price.getItemPrice(), price.getShipping());
+        listing.setLastPrice(price.getItemPrice());
+        listing.setShipping(price.getShipping());
+        if (price.getCurrency() != null) {
+            listing.setCurrency(price.getCurrency());
+        }
+        listing.setAvailability("IN_STOCK");
+        listing.setSourceTimestamp(now);
+        listing.setLastFetchedAt(now);
+        // We looked and it was there — which is what makes the chart able to say
+        // "unchanged since" rather than "unknown since".
+        listing.setLastSeenAt(now);
+        listingRepo.save(listing);
+
+        // FR-PRICE-003 again: a row only when something moved. A direct re-check
+        // of a steady price must not write history a search would not have.
+        if (moved) {
+            snapshotRepo.save(ListingPriceSnapshot.builder()
+                    .listingId(listing.getId())
+                    .marketplace(mp.name())
+                    .storefront(listing.getStorefront())
+                    .marketplaceItemId(listing.getMarketplaceItemId())
+                    .itemPrice(price.getItemPrice())
+                    .shipping(price.getShipping())
+                    .landedPrice(landedPrice(price.getItemPrice(), price.getShipping()))
+                    .currency(listing.getCurrency())
+                    .observedAt(now)
+                    .build());
+        }
+    }
+
+    /**
+     * Records that a listing is no longer on sale.
+     *
+     * <p>{@code lastFetchedAt} moves and {@code lastSeenAt} does not: we looked
+     * just now, and it was not there. Keeping the two apart is what lets the
+     * screen say how long it has been gone instead of showing a fresh timestamp
+     * on an offer nobody can buy. The last price is left where it is, as the
+     * last thing it actually sold for.</p>
+     */
+    private void markGone(CompetitorListing listing) {
+        listing.setAvailability("OUT_OF_STOCK");
+        listing.setLastFetchedAt(Instant.now());
+        listingRepo.save(listing);
+    }
+
     /**
      * Whether this observation differs from the last one recorded for the same
      * marketplace item.
@@ -378,17 +522,23 @@ public class SearchPipelineService {
      */
     private boolean priceMoved(Marketplace mp, String storefront, SearchResultItem item,
                                Instant now) {
+        return priceMoved(mp, storefront, item.getMarketplaceItemId(),
+                item.getPrice(), item.getShipping());
+    }
+
+    private boolean priceMoved(Marketplace mp, String storefront, String itemId,
+                               java.math.BigDecimal price, java.math.BigDecimal shipping) {
         // Compared within one storefront. Across two, every alternation between
         // US$144 and CA$140 looked like a price move and wrote a snapshot.
         var last = snapshotRepo
                 .findFirstByMarketplaceAndStorefrontAndMarketplaceItemIdOrderByObservedAtDesc(
-                        mp.name(), storefront, item.getMarketplaceItemId());
+                        mp.name(), storefront, itemId);
         if (last.isEmpty()) {
             return true;
         }
         ListingPriceSnapshot prev = last.get();
-        return !equalMoney(prev.getItemPrice(), item.getPrice())
-                || !equalMoney(prev.getShipping(), item.getShipping());
+        return !equalMoney(prev.getItemPrice(), price)
+                || !equalMoney(prev.getShipping(), shipping);
     }
 
     /** The storefront a search result came from, from the best evidence it carries. */

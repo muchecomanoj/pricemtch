@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -131,6 +132,24 @@ public class BulkSearchController {
         SaveRowResponse result = service.saveToCatalogue(
                 jobId, rowId, sku, update, marketplace, marketplaceItemId);
         return ResponseEntity.ok(ApiResponse.success(result, result.getMessage()));
+    }
+
+    @DeleteMapping("/{jobId}")
+    @PreAuthorize(WRITE_ROLES)
+    @Operation(summary = "Delete one finished search from the history",
+            description = "Removes the run, its rows and its results. **Products saved from it "
+                    + "stay in the catalogue** — saving a row created a product that stands on its "
+                    + "own, and only the record of which search found it goes. Say so in the "
+                    + "confirmation, because it is the first thing anyone will ask.\n\n"
+                    + "A run that is still PENDING or PROCESSING returns **400**: the background "
+                    + "worker is writing to its rows. The message names how far along it is, and "
+                    + "is written to be shown. Offer delete only on COMPLETED, "
+                    + "COMPLETED_WITH_ERRORS and FAILED runs.\n\n"
+                    + "Returns 200 with a `message` written to be shown as a toast — it names the "
+                    + "file, the rows removed and the fact that saved products remain. Deleting a "
+                    + "run that is already gone returns 404.")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long jobId) {
+        return ResponseEntity.ok(ApiResponse.success(null, service.delete(jobId)));
     }
 
     @GetMapping

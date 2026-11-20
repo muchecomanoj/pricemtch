@@ -67,6 +67,20 @@ public interface SubscriptionService {
     /** One tenant's payments. */
     PagedResponse<PaymentResponse> listTenantPayments(Long tenantId, int page, int size);
 
+    /**
+     * Filtered payment history with its totals and the months that hold any.
+     *
+     * @param tenantId null for the platform owner, who sees every client
+     */
+    com.priceintel.backend.dto.response.PaymentHistoryResponse paymentHistory(
+            Long tenantId,
+            com.priceintel.backend.constants.PaymentStatus status,
+            com.priceintel.backend.constants.PaymentType type,
+            String month,
+            java.time.LocalDate from,
+            java.time.LocalDate to,
+            int page, int size);
+
     /** Applies any scheduled downgrades whose effective date has passed (daily job). */
     int runDueScheduledDowngrades();
 

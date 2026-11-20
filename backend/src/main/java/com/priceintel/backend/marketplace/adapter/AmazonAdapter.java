@@ -395,7 +395,7 @@ public class AmazonAdapter implements MarketplaceAdapter {
         Map<String, OfferListing> unique = new LinkedHashMap<>();
         for (OfferListing o : offers) {
             String key = o.getSellerId() + "|" + o.getListingPrice() + "|" + o.getShipping()
-                    + "|" + o.getCondition() + "|" + o.isFulfilledByMarketplace();
+                    + "|" + o.getCondition() + "|" + o.isFulfilledByAmazon();
             OfferListing kept = unique.get(key);
             if (kept == null) {
                 unique.put(key, o);

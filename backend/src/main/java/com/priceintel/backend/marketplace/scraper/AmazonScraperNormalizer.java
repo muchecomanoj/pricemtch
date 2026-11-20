@@ -183,38 +183,97 @@ public class AmazonScraperNormalizer {
     }
 
     /**
-     * The one offer the page shows — Amazon's buy box.
+     * Every seller the page lists: the buy box, then the other offers.
      *
-     * <p>A single offer, never a seller list. The public page names the winning
-     * offer and not its competitors, so anything more would be invented. The
-     * note says so, because an offers box showing one row looks like a product
-     * with one seller rather than a list we cannot read.</p>
+     * <p>The page's "Other sellers on Amazon" panel names each merchant, its
+     * price, its feedback and whether Amazon ships it — so this is a real seller
+     * list, not a single row. An earlier version read only the buy-box price and
+     * returned nothing when there was none, which hid ten live UK offers behind
+     * "No competing offers" on a listing whose buy box was simply empty.</p>
+     *
+     * <p>Cheapest first, as the SP-API path sorts them, so the two sources read
+     * alike on one screen.</p>
      */
     public List<OfferListing> toOffers(String json, String asin, String requestedCountry,
                                        boolean acceptConverted) {
         Read read = read(json, asin, requestedCountry, acceptConverted);
-        if (read.price().amount() == null) {
-            return new ArrayList<>();
-        }
-        String note = "Amazon " + (read.servedCountry() == null ? "this storefront"
-                : read.servedCountry()) + " is read from the public product page, which names only "
-                + "the winning offer. Other sellers are not listed."
-                + (read.note() == null ? "" : " " + read.note());
-
         List<OfferListing> offers = new ArrayList<>();
-        offers.add(OfferListing.builder()
+
+        // The featured offer. The page states no seller for it, only the price.
+        if (read.price().amount() != null) {
+            offers.add(offer(read, read.price(), true, null, read.price().note()));
+        }
+        for (JsonNode node : read.root().path("other_sellers")) {
+            OfferListing other = otherSeller(read, node, acceptConverted);
+            if (other != null) {
+                offers.add(other);
+            }
+        }
+        offers.sort(java.util.Comparator.comparing(
+                OfferListing::getLandedPrice, java.util.Comparator.nullsLast(BigDecimal::compareTo)));
+        return offers;
+    }
+
+    /**
+     * One row of the page's other-sellers panel.
+     *
+     * <p>Null when the row carries no price we may use — a converted import
+     * quote with conversions switched off, say. A seller row with no price
+     * cannot be compared against anything, and an empty row in a price table
+     * invites the reader to supply the missing number themselves.</p>
+     */
+    private OfferListing otherSeller(Read read, JsonNode node, boolean acceptConverted) {
+        JsonNode priceNode = node.path("price");
+        // These rows carry no price_status of their own; the `converted` flag
+        // is the same distinction under another name.
+        String status = priceNode.path("converted").asBoolean(false) ? "converted" : "ok";
+        List<String> notes = new ArrayList<>();
+        Price price = price(priceNode, status, acceptConverted, notes);
+        if (price.amount() == null) {
+            return null;
+        }
+        JsonNode seller = node.path("seller");
+        return OfferListing.builder()
                 .marketplace(Marketplace.AMAZON)
                 .marketplaceItemId(read.itemId())
-                .listingPrice(read.price().amount())
-                .landedPrice(read.price().amount())
-                .currency(read.price().currency())
-                .buyBoxWinner(true)
+                .sellerId(text(seller, "id"))
+                .sellerName(text(seller, "name"))
+                .condition(text(node, "condition"))
+                .listingPrice(price.amount())
+                // The page quotes one delivered figure and names no shipping
+                // line, so splitting it would invent a breakdown.
+                .landedPrice(price.amount())
+                .currency(price.currency())
+                .buyBoxWinner(false)
+                .fulfilledByAmazon(node.path("fulfilled_by_amazon").asBoolean(false))
+                .sellerPositiveFeedbackRating(
+                        seller.path("positive_percent").isNumber()
+                                ? seller.path("positive_percent").asDouble() : null)
+                .sellerFeedbackCount(
+                        seller.path("ratings_count").isNumber()
+                                ? seller.path("ratings_count").asInt() : null)
                 .countryCode(read.servedCountry())
-                .priceEstimated(read.price().estimated())
+                .priceEstimated(price.estimated())
+                .priceNote(price.note())
+                .source(SOURCE)
+                .build();
+    }
+
+    private OfferListing offer(Read read, Price price, boolean buyBox, JsonNode seller, String note) {
+        return OfferListing.builder()
+                .marketplace(Marketplace.AMAZON)
+                .marketplaceItemId(read.itemId())
+                .sellerId(seller == null ? null : text(seller, "id"))
+                .sellerName(seller == null ? null : text(seller, "name"))
+                .listingPrice(price.amount())
+                .landedPrice(price.amount())
+                .currency(price.currency())
+                .buyBoxWinner(buyBox)
+                .countryCode(read.servedCountry())
+                .priceEstimated(price.estimated())
                 .priceNote(note)
                 .source(SOURCE)
-                .build());
-        return offers;
+                .build();
     }
 
     /** The parsed page, shared by the three reads above. */

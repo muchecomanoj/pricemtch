@@ -273,6 +273,43 @@ public class BulkSearchService {
                 : jobRepo.findByTenantIdOrderByIdDesc(tenant, pageable);
     }
 
+    /**
+     * Removes one finished search and everything it recorded.
+     *
+     * <p>Search history is working notes, not business records: nothing
+     * downstream reads a finished job, so this is a real delete rather than a
+     * hidden row. <strong>Products saved from the run are not touched.</strong>
+     * Saving a row created a catalogue product that stands on its own; only the
+     * note of which search found it goes.</p>
+     *
+     * <p>A run still in progress cannot be deleted. The background worker holds
+     * the job and writes a row at a time, and pulling it out from under the
+     * worker leaves it writing to rows that no longer exist. Waiting is the
+     * honest answer — the run is minutes away from finishing.</p>
+     *
+     * <p>The rows and their saved-listing records go with it through the
+     * database's own cascades, so a job cannot leave orphans behind.</p>
+     */
+    @Transactional
+    public String delete(Long jobId) {
+        BulkSearchJob job = get(jobId);
+        if (job.getStatus() == BulkSearchJob.Status.PENDING
+                || job.getStatus() == BulkSearchJob.Status.PROCESSING) {
+            throw new BadRequestException("That search is still running — "
+                    + job.getProcessedRows() + " of " + job.getTotalRows()
+                    + " row(s) done. It can be deleted once it finishes.");
+        }
+        String name = job.getFileName() == null ? "that search" : job.getFileName();
+        int rows = job.getTotalRows();
+        jobRepo.delete(job);
+        log.info("Deleted bulk search job {} ({}, {} row(s))", jobId, name, rows);
+        // Returned rather than left to the caller to compose: the one thing a
+        // person needs told after a delete is what went and what did not, and
+        // the catalogue half of that is not obvious from the screen.
+        return "Deleted the search for " + name + " — " + rows + " row(s) removed. "
+                + "Products you saved from it stay in your catalogue.";
+    }
+
     // ---------- saving a result into the catalogue ----------
 
     /**

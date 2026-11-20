@@ -242,8 +242,8 @@ public class AmazonProductNormalizer {
                     .landedPrice(shipping == null ? listing : listing.add(shipping))
                     .currency(currencyOf(o.path("ListingPrice"), market))
                     .buyBoxWinner(o.path("IsBuyBoxWinner").asBoolean(false))
-                    .fulfilledByMarketplace(o.path("IsFulfilledByAmazon").asBoolean(false))
-                    .sellerPositiveFeedbackPercent(
+                    .fulfilledByAmazon(o.path("IsFulfilledByAmazon").asBoolean(false))
+                    .sellerPositiveFeedbackRating(
                             feedback.path("SellerPositiveFeedbackRating").isNumber()
                                     ? feedback.path("SellerPositiveFeedbackRating").asDouble() : null)
                     .sellerFeedbackCount(

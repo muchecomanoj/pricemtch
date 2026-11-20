@@ -29,6 +29,15 @@ public class OfferListing {
     /** The marketplace's seller id. Null when the source does not expose it. */
     private String sellerId;
 
+    /**
+     * The seller's shop name, as a shopper sees it.
+     *
+     * <p>Null on SP-API, which gives an id and no name — the screen falls back
+     * to the id there. The public product page does name its sellers, so offers
+     * read from it carry both.</p>
+     */
+    private String sellerName;
+
     /** Item condition as reported by the seller (New, Used, Refurbished...). */
     private String condition;
 
@@ -45,11 +54,18 @@ public class OfferListing {
     /** True when this offer currently holds the featured (Buy Box) position. */
     private boolean buyBoxWinner;
 
-    /** True when the marketplace fulfils the order on the seller's behalf (FBA). */
-    private boolean fulfilledByMarketplace;
+    /**
+     * True when the marketplace fulfils the order on the seller's behalf (FBA).
+     *
+     * <p>Named for what the screen reads rather than for the abstraction: both
+     * sources call it exactly this, and the previous name meant the flag was
+     * carried all the way from Amazon and then silently dropped at the last
+     * step, on every marketplace.</p>
+     */
+    private boolean fulfilledByAmazon;
 
     /** Seller's positive feedback percentage (0-100), null if unknown. */
-    private Double sellerPositiveFeedbackPercent;
+    private Double sellerPositiveFeedbackRating;
 
     /** Number of feedback ratings the seller has, null if unknown. */
     private Integer sellerFeedbackCount;

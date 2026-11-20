@@ -207,8 +207,8 @@ class AmazonScraperListingReadTest {
         }
 
         @Test
-        @DisplayName("offers hold the buy-box only, and say that is all there is")
-        void offersAreTheBuyBoxOnly() {
+        @DisplayName("the buy box is one offer, flagged like the listing")
+        void buyBoxIsAnOffer() {
             when(client.getProduct(eq("B08RC6981L"), anyString())).thenReturn(CONVERTED_UK);
 
             java.util.List<OfferListing> offers = reader.offers("B08RC6981L", "GB");
@@ -216,13 +216,13 @@ class AmazonScraperListingReadTest {
             assertThat(offers).hasSize(1);
             OfferListing offer = offers.get(0);
             assertThat(offer.isBuyBoxWinner()).isTrue();
-            // One row must not read as "this product has one seller".
-            assertThat(offer.getPriceNote()).contains("only the winning offer");
             assertThat(offer.isPriceEstimated()).isTrue();
+            // The page states no seller for the featured offer, only the price.
+            assertThat(offer.getSellerName()).isNull();
         }
 
         @Test
-        @DisplayName("a page with no price yields no offer rather than a priceless one")
+        @DisplayName("a page with no price and no sellers yields nothing")
         void noPriceMeansNoOffer() {
             when(client.getProduct(anyString(), anyString())).thenReturn("""
                     {"asin":"B08RC6981L","found":true,"marketplace":"co.uk",
@@ -248,6 +248,152 @@ class AmazonScraperListingReadTest {
             assertThat(details.getPrice()).isNull();
             assertThat(details.isAvailable()).isFalse();
             assertThat(details.getTitle()).isNotNull();   // the rest still reads
+        }
+    }
+
+    /**
+     * The page's "Other sellers on Amazon" panel.
+     *
+     * <p>Trimmed from the live answer for ASIN B0C78GPJXC on amazon.co.uk — the
+     * listing that reported "No competing offers" while the page itself showed
+     * ten merchants. Its buy box is genuinely empty, which is what made the old
+     * reading drop the whole list.</p>
+     */
+    @Nested
+    @DisplayName("the other sellers the page lists")
+    class OtherSellers {
+
+        private static final String TRAITORS_GB = """
+                {"asin":"B0C78GPJXC","found":true,"marketplace":"co.uk",
+                 "product_name":"Goliath The Traitors Official Board Game Based on the BBC Series",
+                 "details":{"Manufacturer Part Number":"929913.006"},
+                 "price":null,"price_status":"unavailable",
+                 "other_sellers_count":3,
+                 "other_sellers":[
+                   {"condition":"New","fulfilled_by_amazon":false,
+                    "price":{"amount":23.95,"converted":false,"currency":"GBP","raw":"\\u00a323.95"},
+                    "seller":{"id":"A13SFYS7A7JPR","name":"HannSavers",
+                              "positive_percent":81,"ratings_count":15505}},
+                   {"condition":"New","fulfilled_by_amazon":true,
+                    "price":{"amount":30.95,"converted":false,"currency":"GBP","raw":"\\u00a330.95"},
+                    "seller":{"id":"A1O6VQ2EEC4M6O","name":"SNN Trading",
+                              "positive_percent":100,"ratings_count":31}},
+                   {"condition":"New","fulfilled_by_amazon":false,
+                    "price":{"amount":28.0,"converted":false,"currency":"GBP","raw":"\\u00a328.00"},
+                    "seller":{"id":"A3LCJJGXD8YG7K","name":"Toys N Tuck",
+                              "positive_percent":94,"ratings_count":8607}}
+                 ]}
+                """;
+
+        @Test
+        @DisplayName("are all returned, even when the buy box is empty")
+        void sellersSurviveAnEmptyBuyBox() {
+            when(client.getProduct(anyString(), anyString())).thenReturn(TRAITORS_GB);
+
+            java.util.List<OfferListing> offers = reader.offers("B0C78GPJXC", "GB");
+
+            // The old reading returned none of these because `price` was null,
+            // and the screen said the product had no competing offers.
+            assertThat(offers).hasSize(3);
+            assertThat(offers).noneMatch(OfferListing::isBuyBoxWinner);
+        }
+
+        @Test
+        @DisplayName("are cheapest first, matching how SP-API offers are sorted")
+        void cheapestFirst() {
+            when(client.getProduct(anyString(), anyString())).thenReturn(TRAITORS_GB);
+
+            assertThat(reader.offers("B0C78GPJXC", "GB"))
+                    .extracting(OfferListing::getLandedPrice)
+                    .containsExactly(new java.math.BigDecimal("23.95"),
+                            new java.math.BigDecimal("28.0"),
+                            new java.math.BigDecimal("30.95"));
+        }
+
+        @Test
+        @DisplayName("carry the merchant's name, which SP-API never provides")
+        void sellerNamesAreKept() {
+            when(client.getProduct(anyString(), anyString())).thenReturn(TRAITORS_GB);
+
+            assertThat(reader.offers("B0C78GPJXC", "GB"))
+                    .extracting(OfferListing::getSellerName)
+                    .containsExactly("HannSavers", "Toys N Tuck", "SNN Trading");
+        }
+
+        @Test
+        @DisplayName("carry feedback and fulfilment, so a cheap seller can be weighed")
+        void feedbackAndFulfilmentAreKept() {
+            when(client.getProduct(anyString(), anyString())).thenReturn(TRAITORS_GB);
+
+            OfferListing cheapest = reader.offers("B0C78GPJXC", "GB").get(0);
+
+            // £23.95 at 81% is a different proposition from £30.95 at 100%,
+            // and the row has to say which it is.
+            assertThat(cheapest.getSellerId()).isEqualTo("A13SFYS7A7JPR");
+            assertThat(cheapest.getSellerPositiveFeedbackRating()).isEqualTo(81.0);
+            assertThat(cheapest.getSellerFeedbackCount()).isEqualTo(15505);
+            assertThat(cheapest.isFulfilledByAmazon()).isFalse();
+            assertThat(cheapest.getCondition()).isEqualTo("New");
+            assertThat(cheapest.getCurrency()).isEqualTo("GBP");
+        }
+
+        @Test
+        @DisplayName("a price the storefront quoted itself is not flagged as an estimate")
+        void nativeSellerPricesAreNotEstimates() {
+            when(client.getProduct(anyString(), anyString())).thenReturn(TRAITORS_GB);
+
+            assertThat(reader.offers("B0C78GPJXC", "GB"))
+                    .noneMatch(OfferListing::isPriceEstimated);
+        }
+
+        @Test
+        @DisplayName("a converted seller price is flagged, not passed off as a shelf price")
+        void convertedSellerPriceIsFlagged() {
+            when(client.getProduct(anyString(), anyString())).thenReturn("""
+                    {"asin":"B0C78GPJXC","found":true,"marketplace":"co.uk",
+                     "product_name":"The Traitors","price":null,"price_status":"unavailable",
+                     "other_sellers":[
+                       {"condition":"New","fulfilled_by_amazon":false,
+                        "price":{"amount":29.94,"converted":true,"currency":"GBP",
+                                 "original":{"amount":3837.7,"currency":"INR","raw":"INR 3,837.70"},
+                                 "fx":{"rate":0.007802}},
+                        "seller":{"id":"A1","name":"Import Seller"}}
+                     ]}
+                    """);
+
+            OfferListing offer = reader.offers("B0C78GPJXC", "GB").get(0);
+
+            assertThat(offer.isPriceEstimated()).isTrue();
+            assertThat(offer.getPriceNote()).contains("import duty");
+        }
+
+        @Test
+        @DisplayName("a seller row with no usable price is left out, not shown blank")
+        void pricelessSellerRowIsDropped() {
+            AmazonScraperProperties strict = new AmazonScraperProperties();
+            strict.setEnabled(true);
+            strict.setBaseUrl("http://192.168.10.189:5000");
+            strict.setAcceptConvertedPrices(false);
+            AmazonScraperSearch picky = new AmazonScraperSearch(
+                    strict, client, new AmazonScraperNormalizer(new ObjectMapper()));
+            when(client.getProduct(anyString(), anyString())).thenReturn("""
+                    {"asin":"B0C78GPJXC","found":true,"marketplace":"co.uk",
+                     "product_name":"The Traitors","price":null,"price_status":"unavailable",
+                     "other_sellers":[
+                       {"condition":"New",
+                        "price":{"amount":29.94,"converted":true,"currency":"GBP",
+                                 "original":{"amount":3837.7,"currency":"INR"},"fx":{"rate":0.0078}},
+                        "seller":{"id":"A1","name":"Import Seller"}},
+                       {"condition":"New",
+                        "price":{"amount":23.95,"converted":false,"currency":"GBP"},
+                        "seller":{"id":"A2","name":"HannSavers"}}
+                     ]}
+                    """);
+
+            // An empty cell in a price table invites the reader to fill it in.
+            assertThat(picky.offers("B0C78GPJXC", "GB"))
+                    .extracting(OfferListing::getSellerName)
+                    .containsExactly("HannSavers");
         }
     }
 

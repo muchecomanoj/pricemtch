@@ -85,8 +85,8 @@ class AmazonOfferParsingTest {
         OfferListing buyBox = normalizer.toOffers(OFFERS_JSON, "B07BFFCH1Y", AmazonMarketplace.UK).get(0);
 
         assertThat(buyBox.isBuyBoxWinner()).isTrue();
-        assertThat(buyBox.isFulfilledByMarketplace()).isTrue();
-        assertThat(buyBox.getSellerPositiveFeedbackPercent()).isEqualTo(98.5);
+        assertThat(buyBox.isFulfilledByAmazon()).isTrue();
+        assertThat(buyBox.getSellerPositiveFeedbackRating()).isEqualTo(98.5);
         assertThat(buyBox.getSellerFeedbackCount()).isEqualTo(4210);
         assertThat(buyBox.getCurrency()).isEqualTo("GBP");
         assertThat(buyBox.getCountryCode()).isEqualTo("GB");

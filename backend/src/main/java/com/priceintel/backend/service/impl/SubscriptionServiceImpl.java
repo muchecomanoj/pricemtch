@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +25,7 @@ import com.priceintel.backend.constants.SubscriptionStatus;
 import com.priceintel.backend.constants.TenantStatus;
 import com.priceintel.backend.dto.request.PlanRequest;
 import com.priceintel.backend.dto.response.PagedResponse;
+import com.priceintel.backend.dto.response.PaymentHistoryResponse;
 import com.priceintel.backend.dto.response.PaymentResponse;
 import com.priceintel.backend.dto.response.PlanChangeResponse;
 import com.priceintel.backend.dto.response.PlanResponse;
@@ -494,6 +498,100 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public PagedResponse<PaymentResponse> listTenantPayments(Long tenantId, int page, int size) {
         return PagedResponse.from(paymentRepository
                 .findByTenantIdOrderByCreatedAtDesc(tenantId, pageable(page, size)).map(this::toPaymentResponse));
+    }
+
+    /**
+     * Payment history for one client, or for every client when tenantId is null.
+     *
+     * <p>Filtered on the date the row shows — {@code createdAt} — so "October"
+     * means the payments dated October on screen. A payment started on 31
+     * October and paid on 1 November belongs to October here, which is where
+     * someone scrolling the list would look for it.</p>
+     *
+     * @param month {@code YYYY-MM}; a shorthand for the whole of that month,
+     *              and what the month picker sends. Ignored when {@code from}
+     *              or {@code to} is given, since an explicit range is the more
+     *              specific instruction.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentHistoryResponse paymentHistory(Long tenantId, PaymentStatus status,
+            PaymentType type, String month, LocalDate from, LocalDate to, int page, int size) {
+        LocalDateTime start;
+        LocalDateTime end;
+        if (from != null || to != null) {
+            start = from == null ? null : from.atStartOfDay();
+            // Exclusive, so a range ending 31 October still includes a payment
+            // made that evening.
+            end = to == null ? null : to.plusDays(1).atStartOfDay();
+        } else {
+            YearMonth ym = parseMonth(month);
+            start = ym == null ? null : ym.atDay(1).atStartOfDay();
+            end = ym == null ? null : ym.plusMonths(1).atDay(1).atStartOfDay();
+        }
+
+        var rows = paymentRepository.search(tenantId, status, type, start, end, pageable(page, size));
+        return PaymentHistoryResponse.builder()
+                .payments(PagedResponse.from(rows.map(this::toPaymentResponse)))
+                .summary(summarise(tenantId, status, type, start, end))
+                .months(paymentRepository.monthsWithPayments(tenantId))
+                .build();
+    }
+
+    private YearMonth parseMonth(String month) {
+        if (month == null || month.isBlank()) {
+            return null;
+        }
+        try {
+            return YearMonth.parse(month.trim());
+        } catch (DateTimeParseException e) {
+            throw new BadRequestException(
+                    "Unknown month: " + month + ". Use YYYY-MM, for example 2026-10.");
+        }
+    }
+
+    /** Counts per status, and a total only where one currency can carry it. */
+    private PaymentHistoryResponse.Summary summarise(Long tenantId, PaymentStatus status,
+            PaymentType type, LocalDateTime from, LocalDateTime to) {
+        long total = 0;
+        long paid = 0;
+        long pending = 0;
+        long failed = 0;
+        long cancelled = 0;
+        // A status can appear on several rows, one per currency, so every count
+        // accumulates rather than replaces.
+        java.util.Map<String, BigDecimal> paidByCurrency = new java.util.LinkedHashMap<>();
+
+        for (Object[] row : paymentRepository.summarise(tenantId, status, type, from, to)) {
+            PaymentStatus rowStatus = (PaymentStatus) row[0];
+            String currency = (String) row[1];
+            long count = ((Number) row[2]).longValue();
+            BigDecimal amount = row[3] == null ? BigDecimal.ZERO : (BigDecimal) row[3];
+            total += count;
+            switch (rowStatus) {
+                case PAID -> {
+                    paid += count;
+                    paidByCurrency.merge(currency == null ? "" : currency, amount, BigDecimal::add);
+                }
+                case PENDING -> pending += count;
+                case FAILED -> failed += count;
+                case CANCELLED -> cancelled += count;
+            }
+        }
+
+        var builder = PaymentHistoryResponse.Summary.builder()
+                .paidCount(paid).pendingCount(pending).failedCount(failed)
+                .cancelledCount(cancelled).totalCount(total);
+        if (paidByCurrency.size() == 1) {
+            var only = paidByCurrency.entrySet().iterator().next();
+            builder.paidAmount(only.getValue())
+                    .currency(only.getKey().isEmpty() ? null : only.getKey());
+        } else if (paidByCurrency.size() > 1) {
+            // Summing dollars and pounds would state something false, so the
+            // total is withheld rather than guessed and the screen told why.
+            builder.mixedCurrencies(true);
+        }
+        return builder.build();
     }
 
     /**

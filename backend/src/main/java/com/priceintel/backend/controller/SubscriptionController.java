@@ -2,6 +2,9 @@ package com.priceintel.backend.controller;
 
 import java.util.List;
 
+import java.time.LocalDate;
+
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +23,9 @@ import com.priceintel.backend.dto.request.ExtendSubscriptionRequest;
 import com.priceintel.backend.dto.request.PlanRequest;
 import com.priceintel.backend.dto.response.ApiResponse;
 import com.priceintel.backend.dto.response.PagedResponse;
+import com.priceintel.backend.constants.PaymentStatus;
+import com.priceintel.backend.constants.PaymentType;
+import com.priceintel.backend.dto.response.PaymentHistoryResponse;
 import com.priceintel.backend.dto.response.PaymentResponse;
 import com.priceintel.backend.dto.response.PlanChangeResponse;
 import com.priceintel.backend.dto.response.PlanResponse;
@@ -135,23 +141,51 @@ public class SubscriptionController {
     }
 
     // ---- payment history ----
+
+    /** The filters all three payment screens share. See the client endpoint for details. */
+    private static final String FILTER_DOC =
+            "Optional filters: `status` (PENDING, PAID, FAILED, CANCELLED), `type` (INITIAL, "
+                    + "UPGRADE, DOWNGRADE, RENEWAL), `month` as `YYYY-MM`, or `from`/`to` as "
+                    + "`YYYY-MM-DD` inclusive — a range overrides `month`. Filtered on the date "
+                    + "each row shows. The response also carries the totals for the filter and "
+                    + "the months that hold a payment, the latter unnarrowed so the picker keeps "
+                    + "its options.";
+
     @GetMapping("/payments")
-    @Operation(summary = "All payments across all clients (super admin)")
-    public ResponseEntity<ApiResponse<PagedResponse<PaymentResponse>>> allPayments(
+    @Operation(summary = "All payments across all clients (super admin)", description = FILTER_DOC)
+    public ResponseEntity<ApiResponse<PaymentHistoryResponse>> allPayments(
+            @RequestParam(required = false) PaymentStatus status,
+            @RequestParam(required = false) PaymentType type,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        // Null tenant: the platform owner sees every client's payments.
         return ResponseEntity.ok(ApiResponse.success(
-                subscriptionService.listPayments(page, size), "Payments"));
+                subscriptionService.paymentHistory(null, status, type, month, from, to, page, size),
+                "Payments"));
     }
 
 
     @GetMapping("/clients/{tenantId}/payments")
-    @Operation(summary = "A single client's payment history")
-    public ResponseEntity<ApiResponse<PagedResponse<PaymentResponse>>> clientPayments(
+    @Operation(summary = "A single client's payment history", description = FILTER_DOC)
+    public ResponseEntity<ApiResponse<PaymentHistoryResponse>> clientPayments(
             @PathVariable Long tenantId,
+            @RequestParam(required = false) PaymentStatus status,
+            @RequestParam(required = false) PaymentType type,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(
-                subscriptionService.listTenantPayments(tenantId, page, size), "Client payments"));
+                subscriptionService.paymentHistory(
+                        tenantId, status, type, month, from, to, page, size),
+                "Client payments"));
     }
 }

@@ -31,6 +31,7 @@ import com.priceintel.backend.dto.response.ChannelSearchResponse;
 import com.priceintel.backend.entity.BulkSearchJob;
 import com.priceintel.backend.entity.BulkSearchRow;
 import com.priceintel.backend.exception.BadRequestException;
+import com.priceintel.backend.exception.ResourceNotFoundException;
 import com.priceintel.backend.repository.BulkSearchJobRepository;
 import com.priceintel.backend.repository.BulkSearchRowRepository;
 import com.priceintel.backend.repository.BulkSearchRowSaveRepository;
@@ -197,6 +198,98 @@ class BulkSearchRegionTest {
                     // +1 for the header, so the number matches the spreadsheet.
                     .hasMessageContaining("region in row 3")
                     .hasMessageContaining("Britain");
+        }
+    }
+
+    /**
+     * Deleting a run from the history.
+     *
+     * <p>Search history is working notes. The rules worth protecting are that a
+     * run still being written to cannot be pulled out from under its worker, and
+     * that one client cannot delete another's run.</p>
+     */
+    @Nested
+    @DisplayName("deleting a past run")
+    class Delete {
+
+        private BulkSearchJob job(BulkSearchJob.Status status, Long tenant) {
+            BulkSearchJob job = BulkSearchJob.builder()
+                    .tenantId(tenant).fileName("Book1.xlsx").status(status)
+                    .totalRows(8).processedRows(3).build();
+            job.setId(7L);
+            when(jobRepo.findById(7L)).thenReturn(Optional.of(job));
+            return job;
+        }
+
+        @Test
+        @DisplayName("a finished run goes, rows and results with it")
+        void finishedRunIsDeleted() {
+            BulkSearchJob job = job(BulkSearchJob.Status.COMPLETED, TENANT);
+
+            service.delete(7L);
+
+            // One delete: the database cascades rows, and rows cascade their
+            // saved-listing records, so nothing is left orphaned.
+            verify(jobRepo).delete(job);
+        }
+
+        @Test
+        @DisplayName("says what went and what stayed, for the toast")
+        void messageNamesBothHalves() {
+            job(BulkSearchJob.Status.COMPLETED, TENANT);
+
+            // The catalogue half is the part a person cannot see from the
+            // screen, and the part they would otherwise worry about.
+            assertThat(service.delete(7L))
+                    .isEqualTo("Deleted the search for Book1.xlsx — 8 row(s) removed. "
+                            + "Products you saved from it stay in your catalogue.");
+        }
+
+        @Test
+        @DisplayName("a failed run can be deleted too — it is still finished")
+        void failedRunIsDeletable() {
+            BulkSearchJob job = job(BulkSearchJob.Status.FAILED, TENANT);
+
+            service.delete(7L);
+
+            verify(jobRepo).delete(job);
+        }
+
+        @Test
+        @DisplayName("a run still going is refused, and says how far along it is")
+        void runningJobIsRefused() {
+            job(BulkSearchJob.Status.PROCESSING, TENANT);
+
+            assertThatThrownBy(() -> service.delete(7L))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("still running")
+                    .hasMessageContaining("3 of 8");
+
+            // The worker is writing rows; deleting them under it leaves it
+            // writing to rows that no longer exist.
+            verify(jobRepo, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("a queued run is refused for the same reason")
+        void pendingJobIsRefused() {
+            job(BulkSearchJob.Status.PENDING, TENANT);
+
+            assertThatThrownBy(() -> service.delete(7L))
+                    .isInstanceOf(BadRequestException.class);
+            verify(jobRepo, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("another client's run is not there to delete")
+        void otherTenantsJobIsNotFound() {
+            job(BulkSearchJob.Status.COMPLETED, 99L);
+
+            // Reported as missing rather than forbidden: whether another
+            // client's run exists is itself information.
+            assertThatThrownBy(() -> service.delete(7L))
+                    .isInstanceOf(ResourceNotFoundException.class);
+            verify(jobRepo, never()).delete(any());
         }
     }
 

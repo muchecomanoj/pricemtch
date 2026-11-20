@@ -30,6 +30,21 @@ public class RecommendationResponse {
     private String rationale;
     private String status;
     private LocalDate expiresAt;
+
+    /**
+     * Past its {@link #expiresAt} and no longer actionable.
+     *
+     * <p>Submit, approve and publish are all refused once this is true, because
+     * the price was worked out from competitor data as it stood then. Reject
+     * still works — saying no to a stale price is never the unsafe direction.
+     * Show it as needing regeneration rather than offering buttons the server
+     * will turn down.</p>
+     *
+     * <p>Always false for a published or rejected one: those are finished, and
+     * their dates are history rather than a deadline.</p>
+     */
+    private boolean expired;
+
     private LocalDateTime createdAt;
 
     /**

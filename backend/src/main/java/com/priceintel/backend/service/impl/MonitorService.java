@@ -324,7 +324,10 @@ public class MonitorService {
                     Duration.ofMinutes(monitor.getIntervalMinutes()));
             monitor.setLastResultCount(job.getResultCount());
             monitor.setLastStatus("COMPLETED");
-            monitor.setLastMessage(job.getNote());
+            // The search refreshes the listings it returned — its top few. The
+            // rest of the product's competitors are looked up directly, or they
+            // keep their old prices for as long as they stay out of the top few.
+            monitor.setLastMessage(truncate(withRecheck(monitor, startedAt, job.getNote())));
         } catch (Exception e) {
             monitor.setLastStatus("FAILED");
             monitor.setLastMessage(truncate(e.getMessage()));
@@ -334,6 +337,39 @@ public class MonitorService {
         monitor.setLastRunAt(startedAt);
         monitor.setNextRunAt(nextRunFrom(startedAt, monitor.getIntervalMinutes()));
         monitorRepo.save(monitor);
+    }
+
+    /**
+     * How many listings one run may look up directly.
+     *
+     * <p>A ceiling, not a target. Each is a marketplace call, and a product with
+     * 300 attached listings would otherwise spend the shared quota on one
+     * monitor. Oldest first, so the stalest are always the ones done and the
+     * remainder come round on the next run.</p>
+     */
+    private static final int MAX_RECHECKS_PER_RUN = 50;
+
+    /**
+     * Re-prices what the search did not return, and says so in the status line.
+     *
+     * <p>Failure here is swallowed deliberately: the search itself succeeded,
+     * and a monitor that reports FAILED because a side pass could not reach one
+     * marketplace would be reporting the wrong thing about the run.</p>
+     */
+    private String withRecheck(Monitor monitor, Instant startedAt, String note) {
+        String recheck;
+        try {
+            recheck = searchPipeline.recheckAttachedListings(
+                    monitor.getProductId(), startedAt, MAX_RECHECKS_PER_RUN).summary();
+        } catch (Exception e) {
+            log.warn("Monitor {} re-check pass failed for product {}: {}",
+                    monitor.getId(), monitor.getProductId(), e.getMessage());
+            return note;
+        }
+        if (recheck == null) {
+            return note;
+        }
+        return note == null || note.isBlank() ? recheck : note + " · " + recheck;
     }
 
     /**

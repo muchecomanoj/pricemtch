@@ -1,5 +1,6 @@
 package com.priceintel.backend.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -150,6 +151,30 @@ public interface CompetitorListingRepository extends JpaRepository<CompetitorLis
             @Param("status") MatchStatus status,
             @Param("tenantId") Long tenantId,
             @Param("productId") Long productId,
+            Pageable pageable);
+
+    /**
+     * A product's attached listings that a run has not just seen, oldest first.
+     *
+     * <p>A monitor's search returns its top handful of results, and everything
+     * else attached to the product goes untouched: one product had 42 listings
+     * of which 33 had not been re-checked in weeks, while the screen showed
+     * their stale prices beside today's date. These are the ones to look up
+     * directly.</p>
+     *
+     * <p>Rejected listings are left out — someone has already said that is not
+     * this product, and re-pricing it would spend quota to keep a wrong answer
+     * current. Oldest {@code lastSeenAt} first, nulls before those, so a run
+     * capped at fifty takes the stalest and the rest come round next time.</p>
+     */
+    @Query("SELECT c FROM CompetitorListing c "
+            + "WHERE c.productId = :productId "
+            + "AND c.matchStatus <> com.priceintel.backend.constants.MatchStatus.REJECTED "
+            + "AND (c.lastSeenAt IS NULL OR c.lastSeenAt < :notSeenSince) "
+            + "ORDER BY c.lastSeenAt ASC NULLS FIRST")
+    List<CompetitorListing> findStaleForProduct(
+            @Param("productId") Long productId,
+            @Param("notSeenSince") Instant notSeenSince,
             Pageable pageable);
 
     /** Rows predating the tenant column (one-time backfill). */
