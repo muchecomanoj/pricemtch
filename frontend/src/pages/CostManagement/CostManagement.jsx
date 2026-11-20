@@ -10,6 +10,7 @@ import Loader from '../../components/common/Loader'
 import CostFields from '../../components/forms/CostFields'
 import { costModelService } from '../../services/costModelService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // GET / PUT /cost-model — the tenant's GLOBAL cost defaults (FR-COST-001).
 // Identical in shape to a product's own cost profile, so a product with no
@@ -37,7 +38,7 @@ export default function CostManagement() {
       notify.success('Cost model saved')
       qc.invalidateQueries({ queryKey: ['costModel'] })
     },
-    onError: (err) => notify.error(err?.message || 'Could not save the cost model.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the cost model.')),
   })
 
   if (isLoading) return <Loader />
@@ -49,7 +50,7 @@ export default function CostManagement() {
         breadcrumb={[{ label: 'Home', to: '/dashboard' }, { label: 'Cost Management' }]} />
 
       {isError && (
-        <div className="alert alert-danger py-2 small">{error?.message || 'Could not load the cost model.'}</div>
+        <div className="alert alert-danger py-2 small">{errorMessage(error, 'Could not load the cost model.')}</div>
       )}
 
       <div className="row g-3">

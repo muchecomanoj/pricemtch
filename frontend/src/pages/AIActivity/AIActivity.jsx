@@ -9,6 +9,7 @@ import JsonView from '../../components/common/JsonView'
 import StatusBadge from '../../components/common/StatusBadge'
 import { aiService } from '../../services/aiService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // Wires: GET /ai/executions (audit log) + POST /ai/match (tester)
 export default function AIActivity() {
@@ -59,7 +60,7 @@ function MatchTester() {
     catch { return notify.error('Payload is not valid JSON') }
     setBusy(true); setResult(null)
     try { setResult(await aiService.match(body)) }
-    catch (e) { notify.error(e.message || 'Match failed'); setResult({ error: e.message }) }
+    catch (e) { notify.error(errorMessage(e, 'Match failed')); setResult({ error: e.message }) }
     finally { setBusy(false) }
   }
 

@@ -1,10 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import MainLayout from '../layouts/MainLayout'
 import ProtectedRoute from './ProtectedRoute'
 import Loader from '../components/common/Loader'
 import { useAuth } from '../context/AuthContext'
 import { ADMIN_ROLES, SCREEN_ACCESS, homePathForUser, canAccessPath } from '../constants'
+import { lazyPage } from './lazyPage'
 
 // The front door.
 //
@@ -29,53 +29,60 @@ function DashboardRoute() {
   return <Dashboard />
 }
 
-// Lazy-loaded pages -> smaller initial bundle.
-const Login = lazy(() => import('../pages/Login/Login'))
-const TwoFactor = lazy(() => import('../pages/TwoFactor/TwoFactor'))
-const ForgotPassword = lazy(() => import('../pages/ForgotPassword/ForgotPassword'))
-const ClientOnboarding = lazy(() => import('../pages/Onboarding/ClientOnboarding'))
-const SelfSignup = lazy(() => import('../pages/Signup/SelfSignup'))
-const Dashboard = lazy(() => import('../pages/Dashboard/Dashboard'))
-const Products = lazy(() => import('../pages/Products/Products'))
-const ProductDetails = lazy(() => import('../pages/ProductDetails/ProductDetails'))
-const SearchProduct = lazy(() => import('../pages/SearchProduct/SearchProduct'))
-const CompetitorListings = lazy(() => import('../pages/CompetitorListings/CompetitorListings'))
-const TrackedItems = lazy(() => import('../pages/TrackedItems/TrackedItems'))
-const BulkSearch = lazy(() => import('../pages/BulkSearch/BulkSearch'))
-const PriceChanges = lazy(() => import('../pages/PriceChanges/PriceChanges'))
-const MatchReview = lazy(() => import('../pages/MatchReview/MatchReview'))
-const Monitors = lazy(() => import('../pages/Monitors/Monitors'))
-const PriceHistory = lazy(() => import('../pages/PriceHistory/PriceHistory'))
-const CostManagement = lazy(() => import('../pages/CostManagement/CostManagement'))
-const Profitability = lazy(() => import('../pages/Profitability/Profitability'))
-const Recommendations = lazy(() => import('../pages/Recommendations/Recommendations'))
-const Alerts = lazy(() => import('../pages/Alerts/Alerts'))
-const Notifications = lazy(() => import('../pages/Notifications/Notifications'))
-const Reports = lazy(() => import('../pages/Reports/Reports'))
-const AIAnalyst = lazy(() => import('../pages/AIAnalyst/AIAnalyst'))
-const Users = lazy(() => import('../pages/Users/Users'))
-const Roles = lazy(() => import('../pages/Roles/Roles'))
-const Categories = lazy(() => import('../pages/MasterData/Categories'))
-const Brands = lazy(() => import('../pages/MasterData/Brands'))
-const CostTypes = lazy(() => import('../pages/MasterData/CostTypes'))
-const MarketplaceListingDetail = lazy(() => import('../pages/MarketplaceTools/MarketplaceListingDetail'))
-const AIActivity = lazy(() => import('../pages/AIActivity/AIActivity'))
-const Settings = lazy(() => import('../pages/Settings/Settings'))
-const ClientsAdmin = lazy(() => import('../pages/Platform/ClientsAdmin'))
-const ClientDetail = lazy(() => import('../pages/Platform/ClientDetail'))
-const CreateClientWizard = lazy(() => import('../pages/Platform/CreateClientWizard'))
-const PlansAdmin = lazy(() => import('../pages/Platform/PlansAdmin'))
-const SubmissionsAdmin = lazy(() => import('../pages/Platform/SubmissionsAdmin'))
-const LandingContentAdmin = lazy(() => import('../pages/Platform/LandingContentAdmin'))
-const Company = lazy(() => import('../pages/Company/Company'))
-const MySubscription = lazy(() => import('../pages/Company/MySubscription'))
-const BillingReturn = lazy(() => import('../pages/Billing/BillingReturn'))
-const PublicPricing = lazy(() => import('../pages/Public/PublicPricing'))
-const Landing = lazy(() => import('../pages/Public/Landing'))
-const Unsubscribe = lazy(() => import('../pages/Public/Unsubscribe'))
-const NotFound = lazy(() => import('../pages/Error/NotFound'))
-const Forbidden = lazy(() => import('../pages/Error/Forbidden'))
-const ErrorPage = lazy(() => import('../pages/Error/ErrorPage'))
+// Every page, and the signed-in layout itself, is its own file, fetched the
+// first time it is shown. The layout carries framer-motion for the page fade,
+// which the public pages and the first paint don't need.
+//
+// Two loaders: the one below covers the first load of the layout and the
+// public pages; inside the app, MainLayout's own Suspense keeps the sidebar and
+// navbar on screen while a page's file arrives.
+const MainLayout = lazyPage(() => import('../layouts/MainLayout'))
+const Login = lazyPage(() => import('../pages/Login/Login'))
+const TwoFactor = lazyPage(() => import('../pages/TwoFactor/TwoFactor'))
+const ForgotPassword = lazyPage(() => import('../pages/ForgotPassword/ForgotPassword'))
+const ClientOnboarding = lazyPage(() => import('../pages/Onboarding/ClientOnboarding'))
+const SelfSignup = lazyPage(() => import('../pages/Signup/SelfSignup'))
+const Dashboard = lazyPage(() => import('../pages/Dashboard/Dashboard'))
+const Products = lazyPage(() => import('../pages/Products/Products'))
+const ProductDetails = lazyPage(() => import('../pages/ProductDetails/ProductDetails'))
+const SearchProduct = lazyPage(() => import('../pages/SearchProduct/SearchProduct'))
+const CompetitorListings = lazyPage(() => import('../pages/CompetitorListings/CompetitorListings'))
+const TrackedItems = lazyPage(() => import('../pages/TrackedItems/TrackedItems'))
+const BulkSearch = lazyPage(() => import('../pages/BulkSearch/BulkSearch'))
+const PriceChanges = lazyPage(() => import('../pages/PriceChanges/PriceChanges'))
+const MatchReview = lazyPage(() => import('../pages/MatchReview/MatchReview'))
+const Monitors = lazyPage(() => import('../pages/Monitors/Monitors'))
+const PriceHistory = lazyPage(() => import('../pages/PriceHistory/PriceHistory'))
+const CostManagement = lazyPage(() => import('../pages/CostManagement/CostManagement'))
+const Profitability = lazyPage(() => import('../pages/Profitability/Profitability'))
+const Recommendations = lazyPage(() => import('../pages/Recommendations/Recommendations'))
+const Alerts = lazyPage(() => import('../pages/Alerts/Alerts'))
+const Notifications = lazyPage(() => import('../pages/Notifications/Notifications'))
+const Reports = lazyPage(() => import('../pages/Reports/Reports'))
+const AIAnalyst = lazyPage(() => import('../pages/AIAnalyst/AIAnalyst'))
+const Users = lazyPage(() => import('../pages/Users/Users'))
+const Roles = lazyPage(() => import('../pages/Roles/Roles'))
+const Categories = lazyPage(() => import('../pages/MasterData/Categories'))
+const Brands = lazyPage(() => import('../pages/MasterData/Brands'))
+const CostTypes = lazyPage(() => import('../pages/MasterData/CostTypes'))
+const MarketplaceListingDetail = lazyPage(() => import('../pages/MarketplaceTools/MarketplaceListingDetail'))
+const AIActivity = lazyPage(() => import('../pages/AIActivity/AIActivity'))
+const Settings = lazyPage(() => import('../pages/Settings/Settings'))
+const ClientsAdmin = lazyPage(() => import('../pages/Platform/ClientsAdmin'))
+const ClientDetail = lazyPage(() => import('../pages/Platform/ClientDetail'))
+const CreateClientWizard = lazyPage(() => import('../pages/Platform/CreateClientWizard'))
+const PlansAdmin = lazyPage(() => import('../pages/Platform/PlansAdmin'))
+const SubmissionsAdmin = lazyPage(() => import('../pages/Platform/SubmissionsAdmin'))
+const LandingContentAdmin = lazyPage(() => import('../pages/Platform/LandingContentAdmin'))
+const Company = lazyPage(() => import('../pages/Company/Company'))
+const MySubscription = lazyPage(() => import('../pages/Company/MySubscription'))
+const BillingReturn = lazyPage(() => import('../pages/Billing/BillingReturn'))
+const PublicPricing = lazyPage(() => import('../pages/Public/PublicPricing'))
+const Landing = lazyPage(() => import('../pages/Public/Landing'))
+const Unsubscribe = lazyPage(() => import('../pages/Public/Unsubscribe'))
+const NotFound = lazyPage(() => import('../pages/Error/NotFound'))
+const Forbidden = lazyPage(() => import('../pages/Error/Forbidden'))
+const ErrorPage = lazyPage(() => import('../pages/Error/ErrorPage'))
 
 export default function AppRoutes() {
   return (

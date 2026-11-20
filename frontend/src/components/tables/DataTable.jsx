@@ -10,6 +10,13 @@ import EmptyState from '../common/EmptyState'
 // Optional row selection: pass `selected` (a Set of ids) plus onToggleRow and
 // onToggleAll and a checkbox column appears in front. Left out entirely when
 // those are absent, so every existing table renders exactly as before.
+//
+// A last column keyed 'actions' is pinned to the right edge (col-sticky-end),
+// so the row buttons stay reachable when a wide table scrolls sideways. Pass
+// `sticky: false` on that column to opt out.
+const pinned = (c, i, all) => i === all.length - 1 && c.key === 'actions' && c.sticky !== false
+const cellClass = (c, i, all) => [c.className, pinned(c, i, all) && 'col-sticky-end'].filter(Boolean).join(' ') || undefined
+
 export default function DataTable({
   columns, rows, loading, emptyMessage = 'No records found.',
   selected, onToggleRow, onToggleAll, rowId = (r) => r.id,
@@ -29,8 +36,8 @@ export default function DataTable({
                   checked={allSelected} onChange={onToggleAll} />
               </th>
             )}
-            {columns.map((c) => (
-              <th key={c.key} className={c.className}
+            {columns.map((c, i) => (
+              <th key={c.key} className={cellClass(c, i, columns)}
                 style={c.width || c.minWidth ? { width: c.width, minWidth: c.minWidth } : undefined}>
                 {c.header}
               </th>
@@ -51,8 +58,8 @@ export default function DataTable({
                       checked={selected.has(rowId(row))} onChange={() => onToggleRow(rowId(row))} />
                   </td>
                 )}
-                {columns.map((c) => (
-                  <td key={c.key} className={c.className}>
+                {columns.map((c, i) => (
+                  <td key={c.key} className={cellClass(c, i, columns)}>
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}

@@ -2,6 +2,7 @@ import axios from 'axios'
 import { USE_MOCK } from './api'
 import { ENDPOINTS } from './apiEndpoints'
 import { mockResponse } from '../mock/mockHelper'
+import { normalizeApiError } from './apiError'
 
 // Public endpoints live under /api/public (NOT /api/v1), and need no auth token.
 const baseURL = import.meta.env.VITE_PUBLIC_BASE_URL || '/api'
@@ -13,7 +14,7 @@ publicApi.interceptors.response.use((res) => {
   const b = res.data
   if (b && typeof b === 'object' && 'success' in b && 'data' in b) res.data = b.data
   return res
-})
+}, (error) => Promise.reject(normalizeApiError(error)))
 
 // The lead forms need the envelope itself, not its data: the success sentence
 // is the envelope's `message` (tuned per form on the backend), and a refusal
@@ -25,20 +26,9 @@ const formApi = axios.create({
 })
 formApi.interceptors.response.use(
   (res) => res,
-  (error) => {
-    const body = error.response?.data
-    if (error.code === 'ECONNABORTED') {
-      error.message = 'The server took too long to respond. Please try again in a moment.'
-    } else if (!error.response) {
-      error.message = 'Could not reach the server. Check your connection and try again.'
-    } else if (body?.message) {
-      // Validation ("Validation failed") and the hourly throttle both arrive
-      // here; only validation also carries field errors.
-      error.message = body.message
-    }
-    error.fieldErrors = body?.errors && typeof body.errors === 'object' ? body.errors : null
-    return Promise.reject(error)
-  },
+  // Validation ("Validation failed") and the hourly throttle both arrive
+  // here; only validation also carries field errors (error.fieldErrors).
+  (error) => Promise.reject(normalizeApiError(error)),
 )
 
 const get = async (path, mock) => {

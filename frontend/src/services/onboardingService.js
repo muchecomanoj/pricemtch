@@ -3,6 +3,7 @@ import { ENDPOINTS } from './apiEndpoints'
 import { mockResponse } from '../mock/mockHelper'
 import { mockInvitation } from '../mock/onboarding'
 import { appUrl } from '../utils/appPath'
+import { normalizeApiError } from './apiError'
 
 // ---------------------------------------------------------------------------
 // Client onboarding via a secure invitation link. Aligned to the live contract:
@@ -31,11 +32,7 @@ publicApi.interceptors.response.use(
     if (b && typeof b === 'object' && 'success' in b && 'data' in b) res.data = b.data
     return res
   },
-  (error) => {
-    const msg = error.response?.data?.message
-    if (msg) error.message = msg
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(normalizeApiError(error))
 )
 
 export const onboardingService = {

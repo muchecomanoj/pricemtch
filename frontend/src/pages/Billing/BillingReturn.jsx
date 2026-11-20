@@ -7,6 +7,7 @@ import Loader from '../../components/common/Loader'
 import SuccessScreen from '../../components/onboarding/SuccessScreen'
 import { paymentService } from '../../services/paymentService'
 import { useAuth } from '../../context/AuthContext'
+import { errorMessage } from '../../services/apiError'
 
 // PUBLIC route — no auth guard. The client returns here from Stripe after paying
 // to upgrade/downgrade; its login token may be gone, so we must never make an
@@ -66,7 +67,7 @@ export default function BillingReturn() {
       } catch (e) {
         if (!alive) return
         setStatus('error')
-        setMessage(e.message || 'Could not confirm payment. Please refresh in a moment.')
+        setMessage(errorMessage(e, 'Could not confirm payment. Please refresh in a moment.'))
       }
     })()
 

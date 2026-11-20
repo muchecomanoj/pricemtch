@@ -11,6 +11,7 @@ import StatusBadge from '../../components/common/StatusBadge'
 import { planService } from '../../services/planService'
 import { useNotification } from '../../context/NotificationContext'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // Strip values we don't want to send: NaN (blank number inputs), undefined, and
 // empty strings. PUT is a partial update, so omitting a field leaves it unchanged
@@ -33,7 +34,7 @@ export default function PlansAdmin() {
   const saveMut = useMutation({
     mutationFn: ({ id, values }) => (id ? planService.update(id, values) : planService.create(values)),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); notify.success('Plan saved'); setEditing(null) },
-    onError: (e) => notify.error(e.message || 'Could not save plan'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not save plan')),
   })
 
   const toggleActive = (p) => saveMut.mutate({ id: p.id, values: { active: !p.active } })

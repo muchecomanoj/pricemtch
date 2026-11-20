@@ -13,6 +13,7 @@ import { useNotification } from '../../context/NotificationContext'
 import { formatRelativeTime } from '../../utils/format'
 import { mpLabel } from '../../utils/marketplaces'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
+import { errorMessage } from '../../services/apiError'
 
 // POST /reports/generate → preview rows + the full file in one response.
 // The export is every competitor listing across all products, filtered by
@@ -42,7 +43,7 @@ export default function Reports() {
       if (r.rowCount > 0) notify.success(`${r.rowCount} rows generated`)
       else notify.info('No data matches these filters')
     },
-    onError: (err) => notify.error(err?.message || 'Could not generate the report.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not generate the report.')),
   })
 
   const report = generate.data

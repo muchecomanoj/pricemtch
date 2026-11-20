@@ -6,6 +6,7 @@ import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import { notificationChannelService } from '../../services/notificationChannelService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // Each channel carries its own example URL — a Teams field showing a
 // hooks.slack.com address tells the user to paste the wrong thing.
@@ -64,13 +65,13 @@ export default function NotificationChannels() {
       qc.invalidateQueries({ queryKey: ['notificationChannels'] })
     },
     // Enabling a channel with no URL returns 400 with a usable message.
-    onError: (err) => notify.error(err?.message || 'Could not save the channels.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the channels.')),
   })
 
   const sendTest = useMutation({
     mutationFn: (code) => notificationChannelService.test(code),
     onSuccess: (_d, code) => notify.success(`Test message sent to ${code === 'SLACK' ? 'Slack' : 'Teams'}`),
-    onError: (err) => notify.error(err?.message || 'Could not send the test message.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not send the test message.')),
   })
 
   const setChannel = (key, patch) =>

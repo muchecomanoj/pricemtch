@@ -10,6 +10,7 @@ import { CONDITIONS, EXTRA_CHANNELS, conditionMeta, needsThreshold, buildAlertRu
 import { productIntelService } from '../../services/productIntelService'
 import { productService } from '../../services/productService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // One alert rule, for one product or a hundred — POST /alerts/rules/bulk.
 //
@@ -124,7 +125,7 @@ export default function AlertRuleModal({ show, onClose, productIds = [] }) {
       if (res.created > 0) notify.success(`${res.created} alert${res.created === 1 ? '' : 's'} created`)
       else notify.info('No new alerts were created.')
     },
-    onError: (e) => notify.error(e?.message || 'The alerts could not be created.'),
+    onError: (e) => notify.error(errorMessage(e, 'The alerts could not be created.')),
   })
 
   // Only what did not go through. Created rules need no explanation.

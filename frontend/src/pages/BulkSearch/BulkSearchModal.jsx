@@ -5,6 +5,7 @@ import Button from '../../components/common/Button'
 import { bulkSearchService } from '../../services/bulkSearchService'
 import { useNotification } from '../../context/NotificationContext'
 import { REGIONS, isScrapedRegion } from '../../utils/marketplaces'
+import { errorMessage } from '../../services/apiError'
 
 // Starting a bulk search.
 //
@@ -77,7 +78,7 @@ export default function BulkSearchModal({ show, onClose, destination, onStarted 
       })
       onStarted?.(job)
     } catch (e) {
-      notify.error(e?.message || 'The bulk search could not be started.')
+      notify.error(errorMessage(e, 'The bulk search could not be started.'))
     } finally {
       setBusy(false)
     }
@@ -113,8 +114,9 @@ export default function BulkSearchModal({ show, onClose, destination, onStarted 
         {REGIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
       <div className="form-text">
-        The storefront to search for every row. For a file that mixes countries, add a region
-        column: a row&apos;s own region overrides this one.
+        The storefront to search for every row. For a file that mixes countries, add a
+        {' '}<code>region</code> or <code>storefront</code> column: a row&apos;s own value overrides
+        this one. A <code>country</code> column does not, because it means country of origin.
       </div>
       {isScrapedRegion(region) && (
         <div className="field-note field-note--warn mt-2" style={{ maxWidth: 'none' }}>

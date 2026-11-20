@@ -6,6 +6,7 @@ import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import { productIntelService } from '../../services/productIntelService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 const CONDITIONS = [
   'PRICE_DROP', 'PRICE_INCREASE', 'COMPETITOR_CHANGE', 'NEW_SELLER',
@@ -40,13 +41,13 @@ export default function TrackPriceModal({ show, onClose, productId, canManage })
       note: 'Track price',
     }),
     onSuccess: () => { notify.success('Alert rule created'); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not create the rule.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not create the rule.')),
   })
 
   const remove = useMutation({
     mutationFn: (ruleId) => productIntelService.deleteAlertRule(ruleId),
     onSuccess: () => { notify.success('Rule removed'); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not remove the rule.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not remove the rule.')),
   })
 
   const list = rules.data || []

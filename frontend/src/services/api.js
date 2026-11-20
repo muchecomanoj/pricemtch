@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { appPath, currentRoute } from '../utils/appPath'
+import { normalizeApiError } from './apiError'
 
 // ---------------------------------------------------------------------------
 // Centralized Axios instance.
@@ -101,7 +102,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refreshToken')
       if (!refreshToken) {
         clearSession()
-        return Promise.reject(error)
+        return Promise.reject(normalizeApiError(error))
       }
 
       // A refresh is already running — wait for it, then replay.
@@ -129,7 +130,7 @@ api.interceptors.response.use(
         // back from Stripe chose that URL, and a dead session from an earlier
         // visit is no reason to throw it (and its token) away.
         if (!onPublicPage()) window.location.assign(appPath('/login'))
-        return Promise.reject(error)
+        return Promise.reject(normalizeApiError(error))
       } finally {
         isRefreshing = false
       }
@@ -158,10 +159,8 @@ api.interceptors.response.use(
       }
     }
 
-    // Surface the backend's error message when present.
-    const msg = error.response?.data?.message
-    if (msg) error.message = msg
-    return Promise.reject(error)
+    // Readable message, status and field errors — see apiError.js.
+    return Promise.reject(normalizeApiError(error))
   }
 )
 

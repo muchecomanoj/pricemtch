@@ -15,6 +15,7 @@ import { useAuth, useWriteLock } from '../../context/AuthContext'
 import AlertRuleModal from '../../components/alerts/AlertRuleModal'
 import { ChannelPills, conditionLabel, thresholdUnit } from '../../components/alerts/alertRules'
 import { formatDate, formatRelativeTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // GET/POST /alerts/rules · DELETE /alerts/rules/{id} · POST /alerts/rules/evaluate
 //
@@ -62,7 +63,7 @@ export default function Alerts() {
   const remove = useMutation({
     mutationFn: (id) => productIntelService.deleteAlertRule(id),
     onSuccess: () => { notify.success('Rule removed'); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not remove the rule.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not remove the rule.')),
   })
 
   const evaluate = useMutation({
@@ -75,7 +76,7 @@ export default function Alerts() {
       // Firing creates notifications, so the bell badge may have moved.
       qc.invalidateQueries({ queryKey: ['notifications'] })
     },
-    onError: (err) => notify.error(err?.message || 'Could not run the alert check.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not run the alert check.')),
   })
 
   const onDelete = async (row) => {
@@ -106,7 +107,7 @@ export default function Alerts() {
   const setActive = useMutation({
     mutationFn: ({ id, active }) => productIntelService.setAlertRuleActive(id, active),
     onSuccess: (_res, { active }) => { notify.success(active ? 'Rule resumed' : 'Rule paused'); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not change the rule.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not change the rule.')),
   })
 
   const bulkActive = useMutation({
@@ -118,7 +119,7 @@ export default function Alerts() {
       notify.success(`${changed} rule${changed === 1 ? '' : 's'} ${active ? 'resumed' : 'paused'}`)
       clearSelection(); refresh()
     },
-    onError: (err) => notify.error(err?.message || 'Could not change those rules.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not change those rules.')),
   })
 
   const bulkRemove = useMutation({
@@ -128,7 +129,7 @@ export default function Alerts() {
       notify.success(`${deleted} rule${deleted === 1 ? '' : 's'} removed`)
       clearSelection(); refresh()
     },
-    onError: (err) => notify.error(err?.message || 'Could not remove those rules.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not remove those rules.')),
   })
 
   const onBulkDelete = async () => {
@@ -255,7 +256,7 @@ export default function Alerts() {
       >
         {isError ? (
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load the alert rules.'}
+            {errorMessage(error, 'Could not load the alert rules.')}
           </div>
         ) : (
           <>

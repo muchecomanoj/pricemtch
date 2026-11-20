@@ -75,6 +75,15 @@ export const isScrapedRegion = (code) => SCRAPED_REGIONS.has(String(code || '').
 const CURRENCY_REGION = { USD: 'US', CAD: 'CA', GBP: 'GB', MXN: 'MX', INR: 'IN', JPY: 'JP', AUD: 'AU' }
 export const regionForCurrency = (currency) => CURRENCY_REGION[currency] || null
 
+// The other way round: the currency a storefront prices in. Used when a read
+// came back with no price and so no currency — a UK listing must not fall back
+// to dollars just because the price is missing.
+const REGION_CURRENCY = {
+  US: 'USD', CA: 'CAD', GB: 'GBP', MX: 'MXN', IN: 'INR', JP: 'JPY', AU: 'AUD',
+  DE: 'EUR', FR: 'EUR', IT: 'EUR', ES: 'EUR',
+}
+export const currencyForRegion = (code) => REGION_CURRENCY[String(code || '').toUpperCase()] || null
+
 // The two-letter storefront a response came from, or null when it does not say.
 export function storefrontCode({ countryCode, marketplaceId } = {}) {
   const cc = countryCode
@@ -91,7 +100,7 @@ export function storefrontCode({ countryCode, marketplaceId } = {}) {
 // reads as a bug in the app rather than a connector that was never set up.
 export function marketplaceErrorText(error, shopName) {
   const raw = error?.message || ''
-  if (/not authoriz|not authoris|403/i.test(raw)) {
+  if (error?.status === 403 || /not authoriz|not authoris|403/i.test(raw)) {
     return `${shopName || 'That storefront'} is not connected yet, so its listings cannot be read.
       Ask an administrator to authorise it, or pick another storefront.`.replace(/\s+/g, ' ')
   }

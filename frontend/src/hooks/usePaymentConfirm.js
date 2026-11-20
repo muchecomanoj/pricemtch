@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { paymentService } from '../services/paymentService'
+import { errorMessage } from '../services/apiError'
 
 // Confirm a Stripe checkout session against the PUBLIC endpoint (no auth), used
 // by the self-registration and onboarding success screens so activation is
@@ -25,7 +26,7 @@ export function usePaymentConfirm({ active, sessionId }) {
         else { setStatus('notdone'); setMessage(res?.message || 'Payment is not completed yet.') }
       } catch (e) {
         if (!alive) return
-        setStatus('error'); setMessage(e.message || '')
+        setStatus('error'); setMessage(errorMessage(e, ''))
       }
     })()
     return () => { alive = false }

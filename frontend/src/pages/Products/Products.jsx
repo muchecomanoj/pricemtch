@@ -22,6 +22,8 @@ import { productService, downloadBlob, blobErrorMessage } from '../../services/p
 import { useNotification } from '../../context/NotificationContext'
 import { shortItemId } from '../../utils/marketplaces'
 import { useAuth, useWriteLock } from '../../context/AuthContext'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 // Clean fallback for values the backend doesn't provide — never render "undefined".
 const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v)
@@ -90,9 +92,9 @@ export default function Products() {
 
   const [searchInput, setSearchInput] = useState('')  // what's typed
   const [search, setSearch] = useState('')            // debounced, actually queried
-  const [fCategory, setFCategory] = useState('')
-  const [fBrand, setFBrand] = useState('')
-  const [fStatus, setFStatus] = useState('')
+  const [fCategory, setFCategory] = useStoredState('products.category', '')
+  const [fBrand, setFBrand] = useStoredState('products.brand', '')
+  const [fStatus, setFStatus] = useStoredState('products.status', '')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState(() => new Set())
   const [editing, setEditing] = useState(null)  // null=closed, {}=create, {..}=edit
@@ -176,7 +178,7 @@ export default function Products() {
     // Without this the rejection is swallowed: the spinner stops, the modal
     // stays open and the user cannot tell a failed save from a hung one.
     // api.js already copies the backend's message onto error.message.
-    onError: (err) => notify.error(err?.message || 'Could not save the product.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the product.')),
   })
 
   // mutateAsync rejects on failure, so every call site needs a catch — otherwise
@@ -188,7 +190,7 @@ export default function Products() {
         setSelected((s) => { const n = new Set(s); n.delete(row.id); return n })
         notify.success('Product deleted')
       } catch (err) {
-        notify.error(err?.message || 'Could not delete the product.')
+        notify.error(errorMessage(err, 'Could not delete the product.'))
       }
     }
   }
@@ -297,7 +299,7 @@ export default function Products() {
                 <th>Identifiers</th>
                 <th style={{ maxWidth: 160 }}>Category</th>
                 <th className="text-nowrap">Status</th>
-                <th className="text-end text-nowrap">Actions</th>
+                <th className="text-end text-nowrap col-sticky-end">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -326,7 +328,7 @@ export default function Products() {
                   <td><Identifiers product={r} /></td>
                   <td style={{ maxWidth: 160 }}><span className="d-block text-truncate" title={r.category || ''}>{dash(r.category)}</span></td>
                   <td>{r.status ? <StatusBadge status={r.status} /> : '—'}</td>
-                  <td className="text-end">
+                  <td className="text-end col-sticky-end">
                     <div className="d-inline-flex gap-1">
                       <Link to={`/products/${r.id}`} className="icon-btn" title="View details"><FiEye /></Link>
                       {canManage && <button className="icon-btn" title="Edit" onClick={() => setEditing(r)} {...writeLock}><FiEdit2 /></button>}

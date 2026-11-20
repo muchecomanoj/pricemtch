@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useParams, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   FiEdit2, FiTrendingUp, FiPackage, FiTag,
@@ -29,8 +29,16 @@ import TrackPriceModal from './TrackPriceModal'
 import FindCompetitorsModal from './FindCompetitorsModal'
 import MonitorModal from '../Monitors/MonitorModal'
 import { useDestination, destinationPayload } from '../../hooks/useDestination'
+import { errorMessage } from '../../services/apiError'
 
 const TABS = ['Overview', 'Competitors', 'Price History', 'Costs & Profit', 'Sales', 'Recommendations']
+// Short, stable names for the URL — "Costs & Profit" would need escaping and
+// breaks the day the label is reworded.
+const TAB_SLUG = {
+  Overview: 'overview', Competitors: 'competitors', 'Price History': 'history',
+  'Costs & Profit': 'costs', Sales: 'sales', Recommendations: 'recommendations',
+}
+const TAB_BY_SLUG = Object.fromEntries(Object.entries(TAB_SLUG).map(([label, slug]) => [slug, label]))
 const isRealImg = (url) => url && !/placehold/i.test(url)
 
 // Every figure on this page comes from a live endpoint. Load order and
@@ -62,7 +70,15 @@ export default function ProductDetails() {
   // comparable to another when both were figured to the same destination.
   const { destination } = useDestination()
 
-  const [tab, setTab] = useState('Overview')
+  // The tab lives in the URL (?tab=costs) so it survives a reload and a shared
+  // or bookmarked link opens on the same tab. Overview is the bare URL.
+  const [params, setParams] = useSearchParams()
+  const tab = TAB_BY_SLUG[params.get('tab')] || 'Overview'
+  const setTab = (label) => {
+    const p = new URLSearchParams(params)
+    if (label === 'Overview') p.delete('tab'); else p.set('tab', TAB_SLUG[label])
+    setParams(p, { replace: true })
+  }
   const [range, setRange] = useState('30')
   const [imgIdx, setImgIdx] = useState(0)
   const [listingId, setListingId] = useState(null)
@@ -82,8 +98,9 @@ export default function ProductDetails() {
   useEffect(() => {
     if (!location.state?.edit || !product.data) return
     setEditing(true)
-    navigate(location.pathname, { replace: true, state: null })
-  }, [location.state, location.pathname, product.data, navigate])
+    // Keeps the query string, so clearing the edit flag does not drop ?tab=.
+    navigate(location.pathname + location.search, { replace: true, state: null })
+  }, [location.state, location.pathname, location.search, product.data, navigate])
   const candidates = useQuery({ queryKey: ['candidates', id], queryFn: () => productIntelService.candidates(id) })
   const marketPrices = useQuery({ queryKey: ['marketPrices', id], queryFn: () => productIntelService.marketPrices(id) })
   const costProfile = useQuery({ queryKey: ['costProfile', id], queryFn: () => productIntelService.costProfile(id) })
@@ -117,7 +134,7 @@ export default function ProductDetails() {
       qc.invalidateQueries({ queryKey: ['products'] })
       qc.invalidateQueries({ queryKey: ['profitability', id] })
     },
-    onError: (err) => notify.error(err?.message || 'Could not save the product.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the product.')),
   })
 
   // One mutation drives both actions on the same endpoint; `refresh` decides
@@ -152,7 +169,7 @@ export default function ProductDetails() {
       qc.invalidateQueries({ queryKey: ['sales', id] })
       qc.invalidateQueries({ queryKey: ['matchReview'] })
     },
-    onError: (err) => notify.error(err?.message || 'Search failed.'),
+    onError: (err) => notify.error(errorMessage(err, 'Search failed.')),
   })
 
   // Which of the two actions is in flight — they share one mutation, so the
@@ -177,7 +194,7 @@ export default function ProductDetails() {
       setMonitorOpen(false)
       qc.invalidateQueries({ queryKey: ['monitors'] })
     },
-    onError: (err) => notify.error(err?.message || 'Could not save the monitor.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the monitor.')),
   })
 
   if (product.isLoading) return <Loader />
@@ -378,7 +395,8 @@ export default function ProductDetails() {
         <RecommendationsTab productId={id} recommendations={recommendations.data}
           loading={recommendations.isLoading} canManagePricing={canManagePricing}
           costConfigured={costProfile.data?.configured}
-          costSource={costProfile.data?.costSource} />
+          costSource={costProfile.data?.costSource}
+          onOpenCosts={() => setTab('Costs & Profit')} />
       )}
 
       {/* Matches the Add Product modal on the Products page — same form. */}

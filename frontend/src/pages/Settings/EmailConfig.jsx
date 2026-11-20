@@ -10,6 +10,7 @@ import { emailConfigService } from '../../services/emailConfigService'
 import { useNotification } from '../../context/NotificationContext'
 import { mpStatusBadge } from '../../utils/marketplaces'
 import { formatRelativeTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // GET / PUT /settings/email-config  +  POST /settings/email-config/test
 // Reuses mpStatusBadge — the connector status vocabulary is identical
@@ -49,7 +50,7 @@ export default function EmailConfig() {
       notify.success('Email settings saved')
       qc.invalidateQueries({ queryKey: ['emailConfig'] })
     },
-    onError: (err) => notify.error(authError(err) || err?.message || 'Could not save the email settings.'),
+    onError: (err) => notify.error(authError(err) || errorMessage(err, 'Could not save the email settings.')),
   })
 
   const test = useMutation({
@@ -59,7 +60,7 @@ export default function EmailConfig() {
       else notify.error(res?.lastMessage || 'SMTP connection failed')
       qc.invalidateQueries({ queryKey: ['emailConfig'] })
     },
-    onError: (err) => notify.error(authError(err) || err?.message || 'Could not reach the mail server.'),
+    onError: (err) => notify.error(authError(err) || errorMessage(err, 'Could not reach the mail server.')),
   })
 
   // 587 is STARTTLS, 465 is implicit SSL — set the toggles to match so the two

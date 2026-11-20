@@ -13,6 +13,8 @@ import { marketplaceItemService } from '../../services/marketplaceItemService'
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
 import { mpLabel } from '../../utils/marketplaces'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 25
 
@@ -52,16 +54,16 @@ export default function PriceChanges() {
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')   // what is typed
   const [search, setSearch] = useState('')             // debounced
-  const [marketplace, setMarketplace] = useState('')
+  const [marketplace, setMarketplace] = useStoredState('priceChanges.marketplace', '')
   // LANDED_PRICE by default. Every movement writes a PRICE row and a
   // LANDED_PRICE row — identical whenever the marketplace reports no shipping,
   // which on Amazon is nearly always — so the unfiltered feed shows each change
   // twice. Landed is also the comparable figure: item price plus delivery.
-  const [field, setField] = useState('LANDED_PRICE')
-  const [days, setDays] = useState('7')
+  const [field, setField] = useStoredState('priceChanges.field', 'LANDED_PRICE')
+  const [days, setDays] = useStoredState('priceChanges.days', '7')
   // Shows only genuine decreases: down, on a money field, and not a Buy Box
   // handover. See fetchWholeWindow for why this fetches differently.
-  const [cutsOnly, setCutsOnly] = useState(false)
+  const [cutsOnly, setCutsOnly] = useStoredState('priceChanges.cutsOnly', false)
   const { codes: marketplaces } = useMarketplaceCodes()
 
   // Debounced so a request does not go per keystroke, and back to page 1 with
@@ -256,7 +258,7 @@ export default function PriceChanges() {
 
         {isError ? (
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load price changes.'}
+            {errorMessage(error, 'Could not load price changes.')}
           </div>
         ) : (
           <>

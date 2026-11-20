@@ -22,6 +22,7 @@ import { TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
 import { generateCompanyCode } from '../../utils/format'
 import { publicService } from '../../services/publicService'
 import { normalizePlans, catalogDiscountPercent, isFreePlan } from '../../utils/plans'
+import { errorMessage } from '../../services/apiError'
 
 // Super-admin side of onboarding: Steps 1–3.
 const SCREENS = [
@@ -89,7 +90,7 @@ export default function CreateClientWizard() {
       })
       setScreen(2)
     } catch (e) {
-      notify.error(e.message || 'Could not create client')
+      notify.error(errorMessage(e, 'Could not create client'))
     } finally { setSaving(false) }
   }
 
@@ -355,7 +356,7 @@ function InvitationSent({ invite, plan, onDone }) {
       const res = await clientService.resendActivation(invite.id)
       setSent(res?.activationEmailSent ?? true)
       notify.success('Invitation email resent')
-    } catch (e) { notify.error(e.message || 'Could not resend invitation') }
+    } catch (e) { notify.error(errorMessage(e, 'Could not resend invitation')) }
     finally { setResending(false) }
   }
 

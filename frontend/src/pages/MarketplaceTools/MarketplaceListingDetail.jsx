@@ -22,8 +22,10 @@ import AttachToProductModal from './AttachToProductModal'
 import { useNotification } from '../../context/NotificationContext'
 import {
   mpLabel, shortItemId, storefrontLabel, storefrontCode, marketplaceErrorText, REGIONS,
+  currencyForRegion,
 } from '../../utils/marketplaces'
 import { formatCurrency, formatDate, formatRelativeTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v)
 
@@ -84,7 +86,11 @@ export default function MarketplaceListingDetail() {
   const d = detailQ.data || seed || {}
   const price = priceQ.data
   const sales = salesQ.data
-  const currency = d.currency || price?.currency || 'USD'
+  // With no price there is no currency on the response, so the storefront
+  // decides — otherwise a UK listing without a price showed its fee estimate
+  // in dollars.
+  const currency = d.currency || price?.currency
+    || currencyForRegion(storefrontCode(detailQ.data || {}) || resolved) || 'USD'
   const anyMocked = detailQ.data?.mocked || price?.mocked || sales?.mocked
 
   // Where the read actually came from: what the response says, else what was
@@ -264,7 +270,7 @@ export default function MarketplaceListingDetail() {
         <div className="col-12 col-lg-4">
           <Card title="Sales estimate" actions={<FiTrendingUp className="text-muted" />} className="h-100">
             {salesQ.isLoading ? <Loader label="Loading sales…" />
-              : salesQ.isError ? <div className="text-danger small">{salesQ.error?.message || 'Sales estimate unavailable.'}</div>
+              : salesQ.isError ? <div className="text-danger small">{errorMessage(salesQ.error, 'Sales estimate unavailable.')}</div>
                 // UNAVAILABLE: the note is the answer — rows of dashes above it
                 // say nothing and push the reason out of sight.
                   : !sales?.classification || sales.classification === 'UNAVAILABLE' ? (
@@ -436,7 +442,7 @@ function FeeEstimator({ mp, itemId, defaultPrice, currency }) {
     try {
       const r = await marketplaceService.fees(mp, { marketplaceItemId: itemId, price: p, currency })
       setResult(r)
-    } catch (e) { notify.error(e.message || 'Fee estimate failed') }
+    } catch (e) { notify.error(errorMessage(e, 'Fee estimate failed')) }
     finally { setBusy(false) }
   }
 

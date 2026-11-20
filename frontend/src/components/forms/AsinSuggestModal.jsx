@@ -5,6 +5,7 @@ import Button from '../common/Button'
 import EmptyState from '../common/EmptyState'
 import { EMPTY_ASIN_LOOKUP } from '../../services/productService'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // Suggested Amazon ASINs, from a saved product or from a typed value.
 //
@@ -43,7 +44,7 @@ export default function AsinSuggestModal({ show, onClose, fetcher, subject, onUs
       // 400 covers "no web-search model configured" and "product not found".
       // Both are worded usefully by the backend, so pass them through — the
       // first is a setup state rather than something that went wrong.
-      setError(e?.message || 'Could not look up an ASIN.')
+      setError(errorMessage(e, 'Could not look up an ASIN.'))
       setResult(EMPTY_ASIN_LOOKUP)
     } finally {
       setLoading(false)

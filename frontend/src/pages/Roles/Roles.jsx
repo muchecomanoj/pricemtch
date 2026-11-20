@@ -9,6 +9,7 @@ import Button from '../../components/common/Button'
 import Modal from '../../components/common/Modal'
 import { roleService } from '../../services/roleService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 export default function Roles() {
   const qc = useQueryClient()
@@ -23,13 +24,13 @@ export default function Roles() {
   const saveMut = useMutation({
     mutationFn: (v) => (v.__isEdit ? roleService.update(v.name, v) : roleService.create(v)),
     onSuccess: () => { invalidate(); notify.success('Role saved'); setEditing(null) },
-    onError: (e) => notify.error(e.message || 'Could not save role'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not save role')),
   })
 
   const removeMut = useMutation({
     mutationFn: (name) => roleService.remove(name),
     onSuccess: () => { invalidate(); notify.success('Role deleted') },
-    onError: (e) => notify.error(e.message || 'Could not delete role'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not delete role')),
   })
 
   const handleDelete = async (r) => {

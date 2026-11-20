@@ -13,6 +13,7 @@ import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
 import { useNotification } from '../../context/NotificationContext'
 import { mpLabel } from '../../utils/marketplaces'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // FR-REC-002's bounded automation.
 //
@@ -106,7 +107,7 @@ export default function PricingPolicies() {
       setEditing(null)
       notify.success('Policy saved')
     },
-    onError: (e) => notify.error(e?.message || 'The policy could not be saved.'),
+    onError: (e) => notify.error(errorMessage(e, 'The policy could not be saved.')),
   })
 
   const remove = useMutation({
@@ -115,7 +116,7 @@ export default function PricingPolicies() {
       qc.invalidateQueries({ queryKey: ['pricingPolicies'] })
       notify.success('Policy deleted')
     },
-    onError: (e) => notify.error(e?.message || 'The policy could not be deleted.'),
+    onError: (e) => notify.error(errorMessage(e, 'The policy could not be deleted.')),
   })
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))

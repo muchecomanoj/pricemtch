@@ -10,6 +10,7 @@ import EmptyState from '../../components/common/EmptyState'
 import { fxRateService, rateExample } from '../../services/fxRateService'
 import { useNotification } from '../../context/NotificationContext'
 import { formatDate } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // FR-PROFIT-001's stored FX rate.
 //
@@ -58,7 +59,7 @@ export default function ExchangeRates() {
       setForm(EMPTY)
       notify.success('Rate saved')
     },
-    onError: (e) => notify.error(e?.message || 'The rate could not be saved.'),
+    onError: (e) => notify.error(errorMessage(e, 'The rate could not be saved.')),
   })
 
   const remove = useMutation({
@@ -67,7 +68,7 @@ export default function ExchangeRates() {
       qc.invalidateQueries({ queryKey: ['fxRates'] })
       notify.success('Rate deleted')
     },
-    onError: (e) => notify.error(e?.message || 'The rate could not be deleted.'),
+    onError: (e) => notify.error(errorMessage(e, 'The rate could not be deleted.')),
   })
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))

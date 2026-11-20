@@ -32,8 +32,8 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('token')
         // Blocked since the last visit: say so on the login page. That is the
         // error assertNotBlocked throws; a failed request (an expired session,
-        // say) has a response and its raw "status code 401" is no notice.
-        if (e?.message && !e?.response) {
+        // say) is an API error (e.kind is set) and no notice.
+        if (e?.message && !e?.kind) {
           try { sessionStorage.setItem('loginNotice', e.message) } catch { /* storage blocked */ }
         }
       })

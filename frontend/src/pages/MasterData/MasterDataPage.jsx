@@ -9,6 +9,7 @@ import Modal from '../../components/common/Modal'
 import DataTable from '../../components/tables/DataTable'
 import SearchBar from '../../components/common/SearchBar'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // Generic master-data screen: searchable table + add/edit modal + delete.
 //
@@ -53,13 +54,13 @@ export default function MasterDataPage({
       setEditing(null)
       refresh()
     },
-    onError: (err) => notify.error(err?.message || `Could not save the ${entity}.`),
+    onError: (err) => notify.error(errorMessage(err, `Could not save the ${entity}.`)),
   })
 
   const remove = useMutation({
     mutationFn: (id) => store.remove(id),
     onSuccess: () => { notify.success(`${entity[0].toUpperCase()}${entity.slice(1)} deleted`); refresh() },
-    onError: (err) => notify.error(err?.message || `Could not delete the ${entity}.`),
+    onError: (err) => notify.error(errorMessage(err, `Could not delete the ${entity}.`)),
   })
 
   const resetAll = useMutation({

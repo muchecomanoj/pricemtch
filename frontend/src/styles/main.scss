@@ -489,6 +489,32 @@ a { text-decoration: none; }
 .table tbody tr:hover td { background: var(--hover-soft); }
 .table tbody td { padding: 0.85rem 1rem; vertical-align: middle; border-color: var(--border-soft); }
 .table-responsive { border-radius: $border-radius-lg; }
+// Pins a table's last column (the row actions) to the right edge, so the
+// buttons stay reachable when a wide table scrolls sideways. It needs its own
+// background, or the scrolled cells show through it.
+.table .col-sticky-end {
+  position: sticky; right: 0;
+  background: var(--card-bg);
+  box-shadow: inset 1px 0 0 var(--border-soft), -6px 0 8px -6px rgba(15, 23, 42, 0.15);
+}
+.table thead th.col-sticky-end { z-index: 2; }
+.table tbody tr:hover td.col-sticky-end { background: var(--hover-soft); }
+
+// Menus (DropdownMenu) on the app's own surface colours, in both themes —
+// Bootstrap's dark default is a grey that matches nothing else here.
+.dropdown-menu {
+  --bs-dropdown-bg: var(--card-bg);
+  --bs-dropdown-border-color: var(--border-soft);
+  --bs-dropdown-link-color: var(--text-primary);
+  --bs-dropdown-link-hover-color: var(--text-primary);
+  --bs-dropdown-link-hover-bg: var(--hover-soft);
+  --bs-dropdown-link-active-bg: var(--hover-soft);
+  --bs-dropdown-link-active-color: var(--primary);
+}
+
+// A wide table: tighter cell padding so it fits a laptop width.
+.table-compact thead th,
+.table-compact tbody td { padding-left: 0.6rem; padding-right: 0.6rem; }
 
 // ── Badges ───────────────────────────────────────────────────────
 .badge { font-weight: 600; padding: 0.4em 0.75em; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.01em; }
@@ -502,6 +528,9 @@ a { text-decoration: none; }
 
 // Dark mode: use translucent tints so pills sit well on dark cards.
 [data-bs-theme='dark'] {
+  // Bootstrap keeps "light" light in dark mode, so these chips (identifiers,
+  // marketplaces, capabilities) glowed white on dark cards.
+  .text-bg-light     { background: rgba(148,163,184,0.14) !important; color: var(--text-primary) !important; border-color: var(--border-soft) !important; }
   .text-bg-success   { background: rgba(16,185,129,0.22) !important; color: #6ee7b7 !important; }
   .text-bg-warning   { background: rgba(245,158,11,0.22) !important; color: #fcd34d !important; }
   .text-bg-danger    { background: rgba(239,68,68,0.22) !important; color: #fca5a5 !important; }

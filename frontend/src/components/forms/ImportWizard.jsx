@@ -4,6 +4,7 @@ import Modal from '../common/Modal'
 import Button from '../common/Button'
 import { importService } from '../../services/importService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // Wires: POST /imports/preview -> POST /imports -> GET /imports/{id} (poll) -> GET /imports/{id}/errors
 export default function ImportWizard({ show, onClose, onComplete }) {
@@ -30,7 +31,7 @@ export default function ImportWizard({ show, onClose, onComplete }) {
     try {
       setPreview(await importService.preview(file))
       setStep(2)
-    } catch (e) { notify.error(e.message || 'Preview failed') }
+    } catch (e) { notify.error(errorMessage(e, 'Preview failed')) }
     finally { setBusy(false) }
   }
 
@@ -40,7 +41,7 @@ export default function ImportWizard({ show, onClose, onComplete }) {
       const created = await importService.create(file, preview?.suggestedMapping)
       setJob(created); setStep(3)
       poll(created.id)
-    } catch (e) { notify.error(e.message || 'Import failed'); setBusy(false) }
+    } catch (e) { notify.error(errorMessage(e, 'Import failed')); setBusy(false) }
   }
 
   const poll = (id) => {

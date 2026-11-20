@@ -7,6 +7,7 @@ import { useNotification } from '../../context/NotificationContext'
 import { twoFactorService } from '../../services/twoFactorService'
 import { postLoginPath } from '../../constants'
 import OtpInput from '../../components/common/OtpInput'
+import { errorMessage } from '../../services/apiError'
 
 // OTP step of login. Reached from Login when the backend flags twoFactorRequired.
 export default function TwoFactor() {
@@ -36,7 +37,7 @@ export default function TwoFactor() {
       const target = postLoginPath(user, from)
       navigate(target, { replace: true })
     } catch (e) {
-      notify.error(e.message || 'Verification failed')
+      notify.error(errorMessage(e, 'Verification failed'))
       setCode('')
     } finally {
       setBusy(false)

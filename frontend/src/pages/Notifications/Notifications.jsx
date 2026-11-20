@@ -12,6 +12,7 @@ import { notificationService } from '../../services/notificationService'
 import { useNotification } from '../../context/NotificationContext'
 import { styleFor, resolveLink } from '../../components/layout/notificationStyle'
 import { formatRelativeTime, formatDateTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 25
 
@@ -40,7 +41,7 @@ export default function Notifications() {
   const markAll = useMutation({
     mutationFn: () => notificationService.markAllRead(),
     onSuccess: refresh,
-    onError: (err) => notify.error(err?.message || 'Could not mark notifications as read.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not mark notifications as read.')),
   })
 
   // Marking read must never block the navigation the user asked for.
@@ -67,7 +68,7 @@ export default function Notifications() {
 
       <Card title={`All notifications (${total})`} bodyClassName={rows.length ? 'p-0' : ''}>
         {isLoading ? <Loader label="Loading notifications…" />
-          : isError ? <div className="alert alert-danger py-2 small mb-0">{error?.message || 'Could not load notifications.'}</div>
+          : isError ? <div className="alert alert-danger py-2 small mb-0">{errorMessage(error, 'Could not load notifications.')}</div>
             : rows.length === 0 ? (
               <EmptyState icon={FiBell} title="No notifications yet"
                 message="Alerts, plan changes and payment updates appear here as they happen." />

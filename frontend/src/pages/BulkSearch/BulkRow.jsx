@@ -15,6 +15,7 @@ import { useDestination } from '../../hooks/useDestination'
 import { keywordLadder } from '../../utils/identifiers'
 import { primaryIdentifier, identifiersOf } from '../../utils/listingToProduct'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // One line of the uploaded file.
 const STATUS = {
@@ -134,7 +135,7 @@ export default function BulkRow({ row: r }) {
         },
       })
     } catch (e) {
-      notify.error(e?.message || 'Could not load the existing product.')
+      notify.error(errorMessage(e, 'Could not load the existing product.'))
     }
   }
 
@@ -148,7 +149,7 @@ export default function BulkRow({ row: r }) {
       notify.success('Existing product updated')
       setExisting(null)
     } catch (e) {
-      notify.error(e?.message || 'Could not update the product.')
+      notify.error(errorMessage(e, 'Could not update the product.'))
     } finally {
       setUpdating(false)
     }
@@ -262,7 +263,7 @@ export default function BulkRow({ row: r }) {
                 </div>
               ) : rivalsQ.isError ? (
                 <div className="text-muted small">
-                  {rivalsQ.error?.message || 'The competitor search failed.'}{' '}
+                  {errorMessage(rivalsQ.error, 'The competitor search failed.')}{' '}
                   <button type="button" className="btn btn-link btn-sm p-0 align-baseline"
                     onClick={() => rivalsQ.refetch()}>Try again</button>
                 </div>

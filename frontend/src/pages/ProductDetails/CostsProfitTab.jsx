@@ -9,6 +9,7 @@ import CostHistory from './CostHistory'
 import { productIntelService } from '../../services/productIntelService'
 import { useNotification } from '../../context/NotificationContext'
 import { money, pctOf, Stat, CostSourceHint } from './shared'
+import { errorMessage } from '../../services/apiError'
 
 // Short forms for the results panel — the full sentences live on the form.
 const TAX_TREATMENT_SHORT = {
@@ -59,7 +60,7 @@ export default function CostsProfitTab({ productId, costProfile, loadingCost, ca
       qc.invalidateQueries({ queryKey: ['profitability', productId] })
       qc.invalidateQueries({ queryKey: ['costProfileHistory', productId] })
     },
-    onError: (err) => notify.error(err?.message || 'Could not save the cost profile.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the cost profile.')),
   })
 
   const p = profit.data

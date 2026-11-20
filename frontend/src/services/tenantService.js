@@ -68,10 +68,14 @@ export const tenantService = {
     return (await api.post(ENDPOINTS.client.subDowngrade, null, { params: { planCode, billingCycle: billingCycle || undefined } })).data
   },
 
-  // The client's own payment history. Paged: { content, totalElements, ... }.
-  async payments({ page = 1, size = 20 } = {}) {
-    if (USE_MOCK) return (await mockResponse({ content: [], totalElements: 0, page: 0, size })).data
-    const { data } = await api.get(ENDPOINTS.client.payments, { params: { page: page - 1, size } })
+  // The client's own payment history: { payments: page, summary, months }.
+  async payments({ page = 1, size = 20, month, status, type } = {}) {
+    if (USE_MOCK) return (await mockResponse({ payments: { content: [], totalElements: 0, totalPages: 0, page: 0, size }, summary: null, months: [] })).data
+    const { data } = await api.get(ENDPOINTS.client.payments, {
+      params: {
+        page: page - 1, size, month: month || undefined, status: status || undefined, type: type || undefined,
+      },
+    })
     return data
   },
 }
