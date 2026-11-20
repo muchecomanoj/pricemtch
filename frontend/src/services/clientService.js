@@ -118,10 +118,14 @@ export const clientService = {
     return (await api.get(E.sub.history(tenantId))).data
   },
 
-  // Payment records (Stripe). Paged: { content, totalElements, totalPages, page, size }.
-  async payments(tenantId, { page = 1, size = 20 } = {}) {
-    if (USE_MOCK) return (await mockResponse({ content: [], totalElements: 0, totalPages: 0, page: 0, size })).data
-    const { data } = await api.get(E.payments(tenantId), { params: { page: page - 1, size } })
+  // Payment records (Stripe): { payments: page, summary, months }.
+  async payments(tenantId, { page = 1, size = 20, month, status, type } = {}) {
+    if (USE_MOCK) return (await mockResponse({ payments: { content: [], totalElements: 0, totalPages: 0, page: 0, size }, summary: null, months: [] })).data
+    const { data } = await api.get(E.payments(tenantId), {
+      params: {
+        page: page - 1, size, month: month || undefined, status: status || undefined, type: type || undefined,
+      },
+    })
     return data
   },
 }

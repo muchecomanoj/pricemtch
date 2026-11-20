@@ -4,6 +4,7 @@ import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import { marketplaceConfigService } from '../../services/marketplaceConfigService'
 import { useNotification } from '../../context/NotificationContext'
+import { errorMessage } from '../../services/apiError'
 
 // Configure a marketplace's integration credentials. Secrets are write-only:
 // the live entry returns them masked (••••9999) which we show as the placeholder;
@@ -63,7 +64,7 @@ export default function MarketplaceConfigModal({ entry, name, show, onClose, onS
       await persist()
       notify.success(`${name} configuration saved`)
       onClose()
-    } catch (e) { notify.error(e.message || 'Could not save configuration') }
+    } catch (e) { notify.error(errorMessage(e, 'Could not save configuration')) }
     finally { setBusy(false) }
   }
 
@@ -75,7 +76,7 @@ export default function MarketplaceConfigModal({ entry, name, show, onClose, onS
       const res = await marketplaceConfigService.test(code)
       const ok = res?.status === 'CONNECTED'
       setTestResult({ ok, message: res?.lastMessage || (ok ? 'Connection successful.' : 'Connection failed.') })
-    } catch (e) { setTestResult({ ok: false, message: e.message || 'Test failed' }) }
+    } catch (e) { setTestResult({ ok: false, message: errorMessage(e, 'Test failed') }) }
     finally { setBusy(false) }
   }
 

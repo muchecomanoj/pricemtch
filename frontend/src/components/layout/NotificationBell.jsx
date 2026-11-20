@@ -6,6 +6,7 @@ import { notificationService } from '../../services/notificationService'
 import { useNotification } from '../../context/NotificationContext'
 import { formatRelativeTime } from '../../utils/format'
 import { styleFor, resolveLink } from './notificationStyle'
+import { errorMessage } from '../../services/apiError'
 
 const POLL_MS = 30000
 // The dropdown is for "what just happened", not for reading history — with 271
@@ -70,7 +71,7 @@ export default function NotificationBell() {
   const markAll = useMutation({
     mutationFn: () => notificationService.markAllRead(),
     onSuccess: refresh,
-    onError: (err) => notify.error(err?.message || 'Could not mark notifications as read.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not mark notifications as read.')),
   })
 
   return (

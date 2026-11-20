@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
-  FiUploadCloud, FiArrowRight, FiAlertCircle, FiCheckCircle, FiClock,
+  FiUploadCloud, FiArrowRight, FiAlertCircle, FiCheckCircle, FiClock, FiTrash2,
 } from 'react-icons/fi'
 import PageHeader from '../../components/common/PageHeader'
 import Card from '../../components/common/Card'
@@ -12,10 +12,13 @@ import EmptyState from '../../components/common/EmptyState'
 import { SkeletonRows } from '../../components/common/Skeleton'
 import BulkSearchModal from './BulkSearchModal'
 import BulkRow from './BulkRow'
-import { bulkSearchService, RUNNING } from '../../services/bulkSearchService'
+import { bulkSearchService, RUNNING, FINISHED } from '../../services/bulkSearchService'
 import { useDestination } from '../../hooks/useDestination'
+import { useAuth, useWriteLock } from '../../context/AuthContext'
+import { useNotification } from '../../context/NotificationContext'
 import { formatDateTime } from '../../utils/format'
 import { storefrontLabel } from '../../utils/marketplaces'
+import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 25
 
@@ -94,6 +97,34 @@ export default function BulkSearch() {
 
   useEffect(() => { setPage(1) }, [status, jobId])
 
+  const qc = useQueryClient()
+  const { can } = useAuth()
+  const writeLock = useWriteLock()
+  const { notify, confirm } = useNotification()
+
+  // The refetch after a 404 is the point of it: someone else already deleted
+  // that run, so the list is out of date. The backend's message says so.
+  const removeJob = useMutation({
+    mutationFn: (j) => bulkSearchService.remove(j.id),
+    onSuccess: (_, j) => {
+      notify.success(`Deleted the search for ${j.fileName || `job #${j.id}`}`)
+      qc.invalidateQueries({ queryKey: ['bulkSearchHistory'] })
+    },
+    onError: (e) => {
+      notify.error(errorMessage(e, 'That search could not be deleted.'))
+      if (e?.response?.status === 404) qc.invalidateQueries({ queryKey: ['bulkSearchHistory'] })
+    },
+  })
+
+  const onDeleteJob = async (j) => {
+    const ok = await confirm({
+      title: `Delete the search for ${j.fileName || `job #${j.id}`}?`,
+      text: `Its ${j.totalRows} row${j.totalRows === 1 ? '' : 's'} and results are removed. Products you saved from it stay in your catalogue.`,
+      confirmText: 'Delete',
+    })
+    if (ok) removeJob.mutate(j)
+  }
+
   const rows = rowsQ.data?.content ?? []
 
   return (
@@ -119,8 +150,10 @@ export default function BulkSearch() {
             ) : (
               <div className="d-flex flex-column gap-2">
                 {historyQ.data.content.map((j) => (
-                  <Link key={j.id} to={`/search/bulk/${j.id}`}
-                    className="result-card text-reset text-decoration-none">
+                  <div key={j.id} className="result-card align-items-center">
+                    <Link to={`/search/bulk/${j.id}`}
+                      className="d-flex align-items-center gap-3 flex-grow-1 text-reset text-decoration-none"
+                      style={{ minWidth: 0 }}>
                     <div className="flex-grow-1" style={{ minWidth: 0 }}>
                       <div className="d-flex align-items-center flex-wrap gap-2">
                         <span className={`mr-pill mr-pill--${JOB_TONE[j.status] || 'slate'}`}>{j.status}</span>
@@ -133,7 +166,15 @@ export default function BulkSearch() {
                       </div>
                     </div>
                     <FiArrowRight className="flex-shrink-0" />
-                  </Link>
+                    </Link>
+                    {/* Finished runs only: the backend refuses a running one. */}
+                    {can('MANAGE_PRODUCTS') && FINISHED.includes(j.status) && (
+                      <button type="button" className="icon-btn flex-shrink-0" title="Delete this search"
+                        disabled={removeJob.isPending} onClick={() => onDeleteJob(j)} {...writeLock}>
+                        <FiTrash2 />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

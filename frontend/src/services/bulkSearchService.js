@@ -16,6 +16,8 @@ const EMPTY_PAGE = { content: [], totalElements: 0, totalPages: 0, number: 0, si
 
 // Statuses that mean the job is still working, so polling should continue.
 export const RUNNING = ['PENDING', 'PROCESSING']
+// Statuses a run can be deleted from. The backend refuses the rest.
+export const FINISHED = ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED']
 
 // matchesJson / rejectedJson arrive as JSON STRINGS, unlike the single-search
 // response where the same data is a real array. A row whose blob will not parse
@@ -55,6 +57,13 @@ export const bulkSearchService = {
   async job(id) {
     if (USE_MOCK) return null
     return (await api.get(ENDPOINTS.bulkSearch.job(id))).data
+  },
+
+  // DELETE /search/bulk/{id} — 204, no body. Removes the run and its rows;
+  // products saved from it stay in the catalogue. A running job is refused.
+  async remove(id) {
+    if (USE_MOCK) return
+    await api.delete(ENDPOINTS.bulkSearch.job(id))
   },
 
   async rows(id, { status, page = 0, size = 25 } = {}) {

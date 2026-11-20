@@ -1,4 +1,5 @@
 import api from './api'
+import { errorMessage } from './apiError'
 
 // Every CSV export in the app goes through here.
 //
@@ -42,7 +43,7 @@ export async function blobErrorMessage(error, fallback) {
       if (parsed?.message) return parsed.message
     }
   } catch { /* not JSON, or nothing to read — fall through */ }
-  return error?.message || fallback
+  return errorMessage(error, fallback)
 }
 
 // Fetch one CSV and save it. Throws on failure so the caller can report it —

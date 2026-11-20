@@ -8,6 +8,7 @@ import { templateService } from '../../services/templateService'
 import { TEMPLATE_SAMPLE } from '../../mock/emailTemplates'
 import { useNotification } from '../../context/NotificationContext'
 import { useAuth } from '../../context/AuthContext'
+import { errorMessage } from '../../services/apiError'
 
 const SUBJECT_MAX = 300
 const BODY_MAX = 8000
@@ -66,13 +67,13 @@ export default function EmailTemplates() {
   const saveMut = useMutation({
     mutationFn: () => templateService.update(selected.key, { subject: subject.trim(), body }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['email-templates'] }); notify.success('Template saved') },
-    onError: (e) => notify.error(e.message || 'Could not save template'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not save template')),
   })
 
   const testMut = useMutation({
     mutationFn: () => templateService.sendTest(selected.key, testEmail.trim()),
     onSuccess: (r) => notify.success(r?.message || `Test email sent to ${testEmail.trim()}`),
-    onError: (e) => notify.error(e.message || 'Could not send test email'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not send test email')),
   })
 
   // Server-rendered preview of the SAVED template. Only fetched when previewing

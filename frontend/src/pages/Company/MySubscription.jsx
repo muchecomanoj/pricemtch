@@ -6,16 +6,17 @@ import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import Loader from '../../components/common/Loader'
 import StatusBadge from '../../components/common/StatusBadge'
-import DataTable from '../../components/tables/DataTable'
+import PaymentHistoryCard from '../../components/billing/PaymentHistoryCard'
 import { useAuth } from '../../context/AuthContext'
 import { tenantService } from '../../services/tenantService'
 import { useNotification } from '../../context/NotificationContext'
 import { normalizePlans, isFreePlan, FREE_PLAN_CODE } from '../../utils/plans'
 import { formatCurrency, formatDate, daysUntil } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 const PAY_STATUS_TONE = { PAID: 'success', PENDING: 'warning', FAILED: 'danger', CANCELLED: 'secondary' }
 // Payment types in words. RENEWAL is new, from self-service renewal.
-const PAY_TYPE = { RENEWAL: 'Renewal', UPGRADE: 'Upgrade', DOWNGRADE: 'Downgrade', SIGNUP: 'Sign-up', NEW: 'New subscription' }
+const PAY_TYPE = { INITIAL: 'New subscription', RENEWAL: 'Renewal', UPGRADE: 'Upgrade', DOWNGRADE: 'Downgrade', SIGNUP: 'Sign-up', NEW: 'New subscription' }
 
 // Renewing early adds a full period to the current end — no paid days are
 // lost; renewing after it ended starts the period today. The confirmation
@@ -103,7 +104,7 @@ export default function MySubscription() {
     } catch (e) {
       // The backend's refusal for a free plan reads well as sent ("…your data
       // is kept either way"), so it is shown as is.
-      notify.error(e.message || 'Could not start the renewal')
+      notify.error(errorMessage(e, 'Could not start the renewal'))
     } finally {
       inFlight.current = false
       setBusy('')
@@ -138,7 +139,7 @@ export default function MySubscription() {
       notify.success(res?.message || 'Request submitted')
       subQ.refetch()   // reflect scheduled downgrade; plan badge only flips after payment
     } catch (e) {
-      notify.error(e.message || 'Could not change your plan')
+      notify.error(errorMessage(e, 'Could not change your plan'))
     } finally { inFlight.current = false; setBusy('') }
   }
 
@@ -327,12 +328,6 @@ function SeatsBar({ used, max, onUpgrade }) {
 
 // GET /client/payments
 function PaymentHistory() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-payments'],
-    queryFn: () => tenantService.payments({ page: 1, size: 20 }),
-  })
-  const rows = Array.isArray(data) ? data : data?.content || []
-
   const columns = [
     { key: 'createdAt', header: 'Date', render: (p) => (p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—') },
     { key: 'planCode', header: 'Plan', render: (p) => p.planCode ? <span className="badge text-bg-primary">{p.planCode}</span> : '—' },
@@ -343,9 +338,8 @@ function PaymentHistory() {
   ]
 
   return (
-    <Card title="Payment history" actions={<FiDollarSign className="text-muted" />}>
-      <DataTable columns={columns} rows={rows} loading={isLoading}
-        emptyMessage="No payments yet. Pending payments appear here once completed on Stripe." />
-    </Card>
+    <PaymentHistoryCard title="Payment history" actions={<FiDollarSign className="text-muted" />}
+      queryKey={['my-payments']} fetchPage={tenantService.payments} columns={columns}
+      emptyMessage="No payments yet. Pending payments appear here once completed on Stripe." />
   )
 }

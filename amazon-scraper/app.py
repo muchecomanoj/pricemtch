@@ -60,7 +60,7 @@ CORE_FIELDS = ("ASIN", "Marketplace", "ProductName", "Category", "_categories",
                "OriginalPrice", "OriginalPriceValue", "OriginalCurrency",
                "FxRate", "FxAsOf", "FxSource",
                "EAN", "UPC", "GTIN", "ISBN10", "ISBN13",
-               "OtherSellersCount", "OtherSellers", "_other_sellers",
+               "OtherSellersCount", "OtherSellers", "OtherSellersStatus", "_other_sellers",
                # Structured identifiers for the API; underscore keeps it out of Excel
                "_identifiers")
 
@@ -528,10 +528,109 @@ def build_driver(proxy=None):
         driver = webdriver.Chrome(options=chrome_options)
         driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         stealth(driver, languages=["en-US", "en"], vendor="Google Inc.", platform="Win32", webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True)
-        driver.execute_cdp_cmd("Network.setUserAgentOverride", {"userAgent": random.choice(USER_AGENTS)})
+        sanitise_user_agent(driver)
     except Exception as driver_err:
         raise DriverLaunchError(str(driver_err))
     return driver
+
+def sanitise_user_agent(driver):
+    """ Hide the headless marker WITHOUT inventing a version.
+
+    Overriding the UA with a fixed string from a list is worse than leaving it:
+    Chrome still sends Sec-CH-UA client hints with its real version, so a UA
+    claiming Chrome/120 from a Chrome/157 binary contradicts its own headers -
+    and a Firefox UA from a Blink engine contradicts everything. Only the
+    "HeadlessChrome" token is rewritten, leaving the version consistent.
+    """
+    try:
+        agent = driver.execute_script("return navigator.userAgent")
+        if agent and "HeadlessChrome" in agent:
+            driver.execute_cdp_cmd("Network.setUserAgentOverride",
+                                   {"userAgent": agent.replace("HeadlessChrome", "Chrome")})
+    except Exception:
+        pass
+
+# --- BROWSER SESSIONS, WARM-UP AND PACING ---
+# Amazon blocks by behaviour as much as by fingerprint. Three things provoke it:
+# a brand-new cookie-less browser, going straight to /dp/ without ever having
+# seen the storefront, and firing requests back to back. A measured burst of 12
+# product requests in 12s got 2 blocked; the same storefronts answered fine once
+# the session was warmed on their homepage and the requests were paced.
+SESSION_MAX_USES = int(os.environ.get("AMAZON_SESSION_MAX_USES", 40))
+SESSION_MAX_AGE = float(os.environ.get("AMAZON_SESSION_MAX_AGE", 900))
+MIN_REQUEST_GAP = float(os.environ.get("AMAZON_MIN_REQUEST_GAP", 2.0))
+BLOCK_BACKOFF = float(os.environ.get("AMAZON_BLOCK_BACKOFF", 5.0))
+MAX_ATTEMPTS = int(os.environ.get("AMAZON_MAX_ATTEMPTS", 3))
+BLOCK_COOLDOWN = float(os.environ.get("AMAZON_BLOCK_COOLDOWN", 60.0))
+
+_browser_lock = threading.RLock()
+_session = None
+_last_request_at = {}
+
+class BrowserSession:
+    """ A browser kept alive between API calls, so its cookies accumulate """
+
+    def __init__(self, proxy):
+        self.driver = build_driver(proxy)
+        self.proxy = proxy
+        self.created = time.time()
+        self.uses = 0
+        self.warmed = set()
+
+    def worn_out(self):
+        return self.uses >= SESSION_MAX_USES or (time.time() - self.created) > SESSION_MAX_AGE
+
+    def close(self):
+        try:
+            self.driver.quit()
+        except Exception:
+            pass
+
+def reset_browser_session():
+    """ Drop the shared browser (used between tests, and after a wedged run) """
+    global _session
+    with _browser_lock:
+        if _session is not None:
+            _session.close()
+            _session = None
+
+def acquire_session(proxy):
+    """ The shared browser, rebuilt when the proxy changes or it is worn out """
+    global _session
+    if _session is not None and (_session.proxy != proxy or _session.worn_out()):
+        reset_browser_session()
+    if _session is None:
+        _session = BrowserSession(proxy)
+    _session.uses += 1
+    return _session
+
+def pace_marketplace(domain):
+    """ Keep a minimum, jittered gap between requests to the same storefront """
+    gap = MIN_REQUEST_GAP + random.uniform(0, 1.0) - (time.time() - _last_request_at.get(domain, 0))
+    if gap > 0:
+        time.sleep(gap)
+    _last_request_at[domain] = time.time()
+
+def cool_off_marketplace(domain, seconds=None):
+    """ A storefront that just refused us is left alone for a while.
+
+    Recorded as a future timestamp, so the next request to this storefront -
+    in this call or a later one - waits it out in pace_marketplace rather than
+    hammering a storefront that is already saying no.
+    """
+    _last_request_at[domain] = time.time() + (BLOCK_COOLDOWN if seconds is None else seconds)
+
+def warm_up(session, domain):
+    """ Load the storefront's homepage once per session, so the first product
+    request carries real session cookies instead of arriving cold """
+    if domain in session.warmed:
+        return
+    session.warmed.add(domain)
+    try:
+        session.driver.get(f"https://www.amazon.{domain}/")
+        time.sleep(random.uniform(1.5, 3.0))
+    except Exception:
+        pass
 
 # --- PER-MARKETPLACE PAGE OUTCOMES ---
 PAGE_FOUND = "found"
@@ -591,18 +690,24 @@ def classify_page(html, status=None):
         return PAGE_BLOCKED  # "Server Busy" throttling and similar stubs
     return PAGE_NO_PRODUCT
 
-def open_product_page(driver, domain, asin):
+def open_product_page(driver, domain, asin, session=None):
     """ Load one marketplace's product page. Returns (outcome, attempts).
 
     driver.get() already blocks until the page's load event, so only a short
     settle is added for found pages (tested: 1.2s captures exactly what the old
-    fixed 4-5.5s wait did). A blocked page is retried once after a back-off,
-    because "Server Busy" throttling routinely clears on the second request -
-    it must never be recorded as the ASIN being absent. """
+    fixed 4-5.5s wait did).
+
+    A blocked page is retried, because throttling routinely clears on a later
+    request and must never be recorded as the ASIN being absent. Each retry
+    waits longer and re-warms the storefront first, which is what actually got
+    the measured blocks to clear. """
     url = f"https://www.amazon.{domain}/dp/{asin}/"
     outcome = PAGE_ERROR
     attempts = 0
-    for attempts in (1, 2):
+    for attempts in range(1, MAX_ATTEMPTS + 1):
+        if session is not None:
+            warm_up(session, domain)
+        pace_marketplace(domain)
         try:
             driver.get(url)
             outcome = classify_page(driver.page_source, http_status(driver))
@@ -622,13 +727,17 @@ def open_product_page(driver, domain, asin):
             outcome = PAGE_ERROR
         if outcome not in (PAGE_BLOCKED, PAGE_ERROR):
             break
-        if attempts == 1:
-            time.sleep(random.uniform(2.0, 3.5))
+        if attempts < MAX_ATTEMPTS:
+            # Back off further each time, and re-warm so the retry doesn't
+            # repeat the request that was just refused
+            time.sleep(BLOCK_BACKOFF * attempts + random.uniform(0, 2.0))
+            if session is not None:
+                session.warmed.discard(domain)
 
     if outcome == PAGE_FOUND:
         time.sleep(random.uniform(1.0, 2.0))
-    else:
-        time.sleep(random.uniform(0.3, 0.8))  # pace consecutive storefronts
+    elif outcome in (PAGE_BLOCKED, PAGE_ERROR):
+        cool_off_marketplace(domain)
     return outcome, attempts
 
 # --- PRODUCT IDENTIFIERS (EAN / UPC / GTIN / ISBN) ---
@@ -760,18 +869,24 @@ for (const selector of selectors) {
   const el = document.querySelector(selector);
   if (el) { try { el.scrollIntoView({block: 'center'}); el.click(); clicked = selector; break; } catch (e) {} }
 }
-if (!clicked) { done({clicked: null, offers: 0}); }
+const panelOpen = () => !!document.querySelector('#aod-container, #all-offers-display, #aod-filter-list');
+if (!clicked) { done({clicked: null, offers: 0, panel: panelOpen()}); }
 else {
   const deadline = Date.now() + timeout;
   const poll = () => {
     const offers = document.querySelectorAll('#aod-offer').length;
-    if (offers > 0) done({clicked, offers});
-    else if (Date.now() > deadline) done({clicked, offers: 0, timedOut: true});
+    if (offers > 0) done({clicked, offers, panel: true});
+    else if (Date.now() > deadline) done({clicked, offers: 0, panel: panelOpen(), timedOut: true});
     else setTimeout(poll, 300);
   };
   poll();
 }
 """
+
+# Why `other_sellers` is empty, so [] is never ambiguous
+OFFERS_OK = "ok"                      # offers found
+OFFERS_NONE = "none"                  # panel opened and nobody else is selling
+OFFERS_UNAVAILABLE = "unavailable"    # Amazon showed no offers panel at all
 # "4.5 out of 5" is localised, but the star icon's class never is
 STAR_CLASS_PATTERN = re.compile(r"a-star(?:-mini)?-(\d)(?:-(\d))?")
 SELLER_ID_PATTERN = re.compile(r"seller=([A-Z0-9]+)")
@@ -871,17 +986,27 @@ def fetch_other_sellers(driver, domain, timeout=12):
     """ Offers from the all-offers panel, excluding the pinned buy-box offer
     (that one is already reported as the product's own `price`).
 
-    Returns [] when the listing has no other sellers, when the panel never
-    opens, or on any failure - never raises, since this is extra information
-    on top of a product that was already scraped successfully.
+    Returns (offers, status). An empty list means one of two different things,
+    which `status` separates: `none` - the panel opened and nobody else is
+    selling; `unavailable` - Amazon served no offers panel at all, which is what
+    happens when the listing has no buy box ("No featured offers available",
+    "cannot be dispatched to your selected delivery location"). In that case
+    other sellers may well exist for a local shopper; we just can't see them.
+
+    Never raises: this is extra information on top of a product that was already
+    scraped successfully.
     """
     try:
         driver.set_script_timeout(timeout + 10)
         result = driver.execute_async_script(OPEN_OFFERS_JS, int(timeout * 1000))
     except Exception:
-        return []
-    if not result or not result.get("offers"):
-        return []
+        return [], OFFERS_UNAVAILABLE
+
+    if not result:
+        return [], OFFERS_UNAVAILABLE
+    if not result.get("offers"):
+        # The panel rendered but listed nobody else vs never rendered at all
+        return [], (OFFERS_NONE if result.get("panel") else OFFERS_UNAVAILABLE)
 
     soup = BeautifulSoup(driver.page_source, "lxml")
     offers = []
@@ -890,7 +1015,7 @@ def fetch_other_sellers(driver, domain, timeout=12):
             offers.append(parse_offer(node, domain))
         except Exception:
             continue
-    return offers
+    return offers, (OFFERS_OK if offers else OFFERS_NONE)
 
 def summarise_offers(offers):
     """ Flat columns for the Excel sheet """
@@ -1095,23 +1220,21 @@ def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False,
     """
     domains_to_try = search_order(domain, domains)
     search_log = []
-    driver = None
-    active_proxy = False  # sentinel: no driver built yet
     unpriced_listing = None  # first (features, images) found without a price
+    session = None
 
-    try:
+    # One browser at a time, kept warm between calls: its cookies carry over, so
+    # requests stop looking like a stream of brand-new visitors.
+    with _browser_lock:
+      try:
         for domain_attempt in domains_to_try:
             # Each marketplace may route through its own country's proxy, so the
-            # driver is rebuilt whenever the proxy changes between attempts.
-            proxy = proxy_for_domain(domain_attempt)
-            if driver is None or proxy != active_proxy:
-                if driver is not None:
-                    driver.quit()
-                driver = build_driver(proxy)
-                active_proxy = proxy
+            # session is rebuilt whenever the proxy changes between attempts.
+            session = acquire_session(proxy_for_domain(domain_attempt))
+            driver = session.driver
 
             started = time.time()
-            outcome, attempts = open_product_page(driver, domain_attempt, asin)
+            outcome, attempts = open_product_page(driver, domain_attempt, asin, session)
             entry = {"marketplace": domain_attempt, "result": outcome,
                      "attempts": attempts, "seconds": round(time.time() - started, 1)}
             search_log.append(entry)
@@ -1124,8 +1247,9 @@ def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False,
                 # Opening the offers panel changes the DOM, so it is done only
                 # once the product page itself has been parsed.
                 if include_other_sellers:
-                    offers = fetch_other_sellers(driver, domain_attempt)
+                    offers, offers_status = fetch_other_sellers(driver, domain_attempt)
                     features["_other_sellers"] = offers
+                    features["OtherSellersStatus"] = offers_status
                     features.update(summarise_offers(offers))
                 return features, images, search_log
 
@@ -1139,9 +1263,15 @@ def scrape_asin(asin, domain=DEFAULT_DOMAIN, domains=None, require_price=False,
         # ASIN wasn't found on any marketplace we checked
         return ({"ASIN": asin, "ProductName": "Not Found", "Description": "Not Found", "Marketplace": "Not Found"},
                 [], search_log)
-    finally:
-        if driver is not None:
-            driver.quit()
+      except Exception:
+        # Never hand a wedged browser to the next request
+        reset_browser_session()
+        raise
+      finally:
+        # The browser deliberately stays open for the next call; it is only
+        # dropped once it is old enough or has done enough requests.
+        if _session is not None and _session.worn_out():
+            reset_browser_session()
 
 @app.route("/scrape-single-asin", methods=["POST"])
 def scrape_single_asin():
@@ -1302,6 +1432,8 @@ def api_product():
         # Everyone else selling this ASIN, from the "Other sellers" panel
         "other_sellers": features.get("_other_sellers") or [],
         "other_sellers_count": features.get("OtherSellersCount", 0),
+        # ok | none | unavailable - tells an empty list apart from "couldn't look"
+        "other_sellers_status": features.get("OtherSellersStatus", OFFERS_UNAVAILABLE),
         "images": images,
         # Whatever the listing's technical-detail tables carried — brand, model,
         # dimensions, rank, reviews, ... varies product by product.

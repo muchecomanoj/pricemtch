@@ -14,6 +14,7 @@ import {
   conditionOf, identifiersOf, suggestSku, primaryIdentifier, brandOf,
 } from '../../utils/listingToProduct'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // "This listing is a product I sell" — straight from a search result.
 //
@@ -122,7 +123,7 @@ export default function SaveAsProductModal({ show, onClose, listing, decision, o
       setDone(res)
       notify.success('Added to your catalog')
     },
-    onError: (e) => notify.error(e?.message || 'The product could not be created.'),
+    onError: (e) => notify.error(errorMessage(e, 'The product could not be created.')),
   })
 
   const valid = form.title.trim() && form.sku.trim()

@@ -17,6 +17,8 @@ import { productIntelService } from '../../services/productIntelService'
 import { productService } from '../../services/productService'
 import { useNotification } from '../../context/NotificationContext'
 import { useAuth } from '../../context/AuthContext'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 // Cross-product review queue — FR-MATCH-003. GET /match-review returns only
 // pending candidates, already scored, so the reviewer works a ranked list
@@ -37,7 +39,7 @@ export default function MatchReview() {
   const canReview = can('AI_MATCH') || can('MANAGE_PRODUCTS')
 
   const [page, setPage] = useState(1)   // UI 1-based, API 0-based
-  const [sort, setSort] = useState('score')
+  const [sort, setSort] = useStoredState('matchReview.sort', 'score')
   const [productLabel, setProductLabel] = useState('')
 
   // /match-review has no free-text search, but it does accept productId — so a
@@ -77,7 +79,7 @@ export default function MatchReview() {
     mutationFn: ({ listingId, decision }) => productIntelService.review(listingId, decision),
     onMutate: ({ listingId }) => setDeciding((s) => new Set(s).add(listingId)),
     onSuccess: (_d, { decision }) => { notify.success(`Marked ${decision.toLowerCase()}`); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not save the decision.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not save the decision.')),
     onSettled: (_d, _e, { listingId }) => setDeciding((s) => {
       const n = new Set(s); n.delete(listingId); return n
     }),
@@ -99,7 +101,7 @@ export default function MatchReview() {
       else notify.error(`${ok} of ${total} saved — ${total - ok} failed.`)
       refresh()
     },
-    onError: (err) => notify.error(err?.message || 'Bulk update failed.'),
+    onError: (err) => notify.error(errorMessage(err, 'Bulk update failed.')),
   })
 
   const runDecide = useCallback((listingId, decision) => {
@@ -206,7 +208,7 @@ export default function MatchReview() {
       {isError ? (
         <Card>
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load the review queue.'}
+            {errorMessage(error, 'Could not load the review queue.')}
           </div>
         </Card>
       ) : isLoading ? (

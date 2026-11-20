@@ -6,6 +6,7 @@ import ChartCard from '../../components/charts/ChartCard'
 import EmptyState from '../../components/common/EmptyState'
 import { productIntelService } from '../../services/productIntelService'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // GET /products/{id}/price-history-rollup?bucket=day|week&from&to
 //
@@ -125,7 +126,7 @@ export default function HistoricalPrices({ productId, currency = 'USD' }) {
     return (
       <Card title="Historical prices" className="h-100">
         <div className="alert alert-danger py-2 small mb-0">
-          {error?.message || 'Could not load the price history.'}
+          {errorMessage(error, 'Could not load the price history.')}
         </div>
       </Card>
     )

@@ -6,6 +6,7 @@ import { FiEye, FiEyeOff, FiArrowRight, FiAlertCircle } from 'react-icons/fi'
 import { useAuth } from '../../context/AuthContext'
 import { useNotification } from '../../context/NotificationContext'
 import { APP_NAME, postLoginPath } from '../../constants'
+import { errorMessage } from '../../services/apiError'
 
 export default function Login() {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
@@ -50,7 +51,7 @@ export default function Login() {
       // Surface the backend's exact message on-screen. For a tenant that hasn't
       // paid yet the API returns "Please complete your subscription payment…" —
       // show that verbatim rather than a generic "no permission".
-      const msg = err.message || 'Login failed'
+      const msg = errorMessage(err, 'Login failed')
       setLoginError(msg)
       notify.error(msg)
     }

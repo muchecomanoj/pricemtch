@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { productIntelService } from '../services/productIntelService'
 import { useNotification } from '../context/NotificationContext'
+import { errorMessage } from '../services/apiError'
 
 // Roughly 15 judgements a minute on the free tier — measured by the backend,
 // not guessed. 20 is therefore about 80 seconds, which is why this reports
@@ -50,9 +51,9 @@ export function useAiReview(productId, { onDone } = {}) {
       // failure of the review — saying "review failed" would send someone
       // looking for a bug that isn't there.
       if (err?.response?.status === 409) {
-        notify.info(err.message || 'AI review is not set up yet — no provider is configured.')
+        notify.info(errorMessage(err, 'AI review is not set up yet — no provider is configured.'))
       } else {
-        notify.error(err?.message || 'Could not run the AI review.')
+        notify.error(errorMessage(err, 'Could not run the AI review.'))
       }
       return null
     } finally {

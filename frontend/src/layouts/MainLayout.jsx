@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import SubscriptionBanner from '../components/layout/SubscriptionBanner'
@@ -8,6 +8,7 @@ import Footer from '../components/layout/Footer'
 import { useAuth } from '../context/AuthContext'
 import { useNotification } from '../context/NotificationContext'
 import ErrorBoundary from '../components/common/ErrorBoundary'
+import Loader from '../components/common/Loader'
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)   // mobile drawer
@@ -55,7 +56,11 @@ export default function MainLayout() {
               {/* Keyed on the path so navigating away from a broken page
                   clears the error rather than carrying it to the next one. */}
               <ErrorBoundary resetKey={location.pathname}>
-                <Outlet />
+                {/* Pages load on first visit. Waiting here keeps the sidebar
+                    and navbar in place; only the content area shows a loader. */}
+                <Suspense fallback={<Loader label="Loading page…" />}>
+                  <Outlet />
+                </Suspense>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>

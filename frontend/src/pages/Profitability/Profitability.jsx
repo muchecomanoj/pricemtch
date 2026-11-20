@@ -13,6 +13,7 @@ import EmptyState from '../../components/common/EmptyState'
 import { SkeletonCard } from '../../components/common/Skeleton'
 import { productIntelService } from '../../services/productIntelService'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // GET /products/{id}/profitability — calculated from the product's cost profile
 // (or the tenant default) and its ourPrice. Everything here is deterministic;
@@ -40,7 +41,7 @@ export default function Profitability() {
         actions={<ProductSelector value={productId} onChange={setProductId} />} />
 
       {isError && (
-        <div className="alert alert-danger py-2 small">{error?.message || 'Could not load profitability.'}</div>
+        <div className="alert alert-danger py-2 small">{errorMessage(error, 'Could not load profitability.')}</div>
       )}
 
       {!productId ? (

@@ -1,23 +1,18 @@
-import { useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  FiSearch, FiBox, FiCheckCircle, FiMinusCircle, FiXCircle, FiArrowRight,
-  FiChevronDown, FiChevronUp, FiAlertCircle, FiExternalLink, FiImage, FiRefreshCw, FiRotateCcw,
-  FiPlus, FiUpload, FiPackage,
-} from 'react-icons/fi'
+import { FiSearch, FiAlertCircle, FiPlus, FiUpload } from 'react-icons/fi'
+import { useRecentSearches } from '../../hooks/useRecentSearches'
 import PageHeader from '../../components/common/PageHeader'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import EmptyState from '../../components/common/EmptyState'
-import StatusBadge from '../../components/common/StatusBadge'
-import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
-import ItemPriceHistory from '../../components/common/ItemPriceHistory'
-import ItemRecentChanges from '../../components/common/ItemRecentChanges'
 import SearchForm, { EMPTY_SEARCH, buildPayloads } from './SearchForm'
 import JudgedListings from './JudgedListings'
+import ChannelCard from './ChannelResults'
+import MatchPriceHistory from './MatchPriceHistory'
+import { RecentSearches, CatalogCard, ImageHitsCard } from './SearchResults'
 import SaveAsProductModal from '../../components/products/SaveAsProductModal'
-import MarketplaceLogo from '../../components/common/MarketplaceLogo'
 import { searchService, searchByImage } from '../../services/searchService'
 import { marketplaceService } from '../../services/marketplaceService'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
@@ -27,9 +22,9 @@ import ProductForm from '../../components/forms/ProductForm'
 import { productService } from '../../services/productService'
 import { useAuth } from '../../context/AuthContext'
 import { useNotification } from '../../context/NotificationContext'
-import { mpLabel, isScrapedRegion, storefrontLabel, listingPath } from '../../utils/marketplaces'
+import { mpLabel, isScrapedRegion, storefrontLabel } from '../../utils/marketplaces'
 import { alternateKey, KEY_LABEL, keywordLadder } from '../../utils/identifiers'
-import { formatCurrency, formatDateTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // Product discovery — FR-SRCH-001, FRD §13.1.
 //
@@ -56,22 +51,6 @@ import { formatCurrency, formatDateTime } from '../../utils/format'
 // region the price came from. It is never reconstructed here: an ASIN pasted
 // onto amazon.com when the price was read from amazon.ca points at a different
 // listing at a different price, which is worse than no link.
-
-// Fixed vocabulary, so an empty result is explainable rather than ambiguous.
-// The distinction that matters: RESTRICTED_ACCESS and RATE_LIMITED mean we were
-// stopped from looking, which is NOT evidence the product is absent.
-const OUTCOME = {
-  SUCCESS: { tone: 'green', label: 'Found' },
-  CACHED: { tone: 'green', label: 'From cache' },
-  NO_RESULT: { tone: 'slate', label: 'Not there' },
-  UNPRICED: { tone: 'orange', label: 'No price' },
-  SKIPPED: { tone: 'slate', label: 'Skipped' },
-  RESTRICTED_ACCESS: { tone: 'red', label: 'Access refused' },
-  RATE_LIMITED: { tone: 'orange', label: 'Rate limited' },
-  AUTHENTICATION_ERROR: { tone: 'red', label: 'Auth failed' },
-  PROVIDER_ERROR: { tone: 'red', label: 'Provider error' },
-}
-const outcomeOf = (o) => OUTCOME[o] || { tone: 'slate', label: o || 'Unknown' }
 
 // Searches that resolve to exactly one product, and therefore always want a
 // keyword pass afterwards. TITLE and BRAND are already keyword searches, so
@@ -107,7 +86,18 @@ export default function SearchProduct() {
   // FRD 13.1 puts intake on this screen: a search that finds nothing should
   // flow straight into creating the product, rather than sending someone to
   // another page to retype what they just searched for.
-  const { can } = useAuth()
+  const { can, user } = useAuth()
+  const { recent, remember, forget, clear: clearRecent } = useRecentSearches(user?.id ?? user?.email)
+
+  // Fills the form exactly as it was and runs it, so the result is the same
+  // search rather than an approximation of it.
+  const rerun = (e) => {
+    const f = { ...EMPTY_SEARCH, key: e.key, value: e.value, region: e.region,
+      maxResults: e.maxResults || EMPTY_SEARCH.maxResults }
+    setForm(f)
+    setMarkets(e.markets || [])
+    run({ form: f, markets: e.markets || [] })
+  }
   const { notify } = useNotification()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -121,7 +111,7 @@ export default function SearchProduct() {
       notify.success('Product created')
       if (p?.id) navigate(`/products/${p.id}`)
     },
-    onError: (e) => notify.error(e?.message || 'Could not create the product.'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not create the product.')),
   })
 
   // Seed the form from whatever was searched, so an identifier that came back
@@ -146,9 +136,12 @@ export default function SearchProduct() {
   //
   // `f` overrides the form, for re-running immediately after picking a listing.
   // `retried` stops the ambiguous-identifier retry below from looping.
-  const run = async ({ force = false, form: f = form, retried = false } = {}) => {
+  // `m` overrides the marketplaces the same way, for re-running a recent search.
+  const run = async ({ force = false, form: f = form, markets: m = markets, retried = false } = {}) => {
     setRivals(null)
-    const { catalogQuery, channel: payload } = buildPayloads(f, markets, destination)
+    // What was typed, not what a retry turned it into below.
+    if (!retried) remember(f, m)
+    const { catalogQuery, channel: payload } = buildPayloads(f, m, destination)
     // Always judged — see the note at the top of this file.
     payload.judge = true
     if (force) payload.forceRefresh = true
@@ -171,7 +164,7 @@ export default function SearchProduct() {
       ])
       setChannel(ch.status === 'fulfilled' ? ch.value
         : { items: [], steps: [], retryable: true,
-          note: ch.reason?.message || 'The marketplace search failed.' })
+          note: errorMessage(ch.reason, 'The marketplace search failed.') })
       if (cat.status === 'fulfilled' && cat.value) setCatalog(cat.value)
       if (img.status === 'fulfilled' && img.value) setImageHits(img.value)
 
@@ -198,7 +191,7 @@ export default function SearchProduct() {
       setForm(next)
       notify.info(`Nothing found as ${KEY_LABEL[f.key] || f.key} — trying it as ${
         KEY_LABEL[retryAs] || retryAs}.`)
-      await run({ force, form: next, retried: true })
+      await run({ force, form: next, markets: m, retried: true })
     }
   }
 
@@ -252,7 +245,7 @@ export default function SearchProduct() {
     } catch (e) {
       setRivals({
         title: ladder[0],
-        result: { matches: [], rejected: [], message: e?.message || 'The competitor search failed.' },
+        result: { matches: [], rejected: [], message: errorMessage(e, 'The competitor search failed.') },
       })
     } finally {
       setRivalsBusy(false)
@@ -273,8 +266,6 @@ export default function SearchProduct() {
   // Step 6 ran when the response carries verdict arrays. NOT_JUDGED (or a
   // failure before judging) leaves them null, and the raw item grid stands in.
   const judged = Array.isArray(channel?.matches) || Array.isArray(channel?.rejected)
-
-  const catalogRows = catalog?.results || []
 
   return (
     <>
@@ -321,6 +312,10 @@ export default function SearchProduct() {
         onSearch={() => run()} busy={busy} onReset={reset}
       />
 
+      {recent.length > 0 && (
+        <RecentSearches recent={recent} busy={busy} onRerun={rerun} onForget={forget} onClear={clearRecent} />
+      )}
+
       {/* A judged search at 40 per marketplace runs close to a minute, and the
           old page showed nothing at all until it finished — a spinner on the
           button, and otherwise a screen that looks broken. What it is doing and
@@ -344,176 +339,12 @@ export default function SearchProduct() {
 
       {/* ── The marketplaces ─────────────────────────────────────── */}
       {channel && (
-        <Card className="mt-3" title="On the marketplaces"
-          // The time these prices were read, in the header rather than buried
-          // in the trace. Marketplace prices move by the hour, so "ours says
-          // $2,539.99, Amazon says $2,554.45" is unanswerable without knowing
-          // when ours was taken — and the first assumption is always a bug.
-          subtitle={`${judged
-            ? 'Every listing here was found by a marketplace. The verdicts on them are AI.'
-            : 'Live listings — what competitors are selling and charging.'}${
-            channel.finishedAt ? ` Prices as at ${fmtTime(channel.finishedAt)}.` : ''}`}
-          actions={(
-            <Button write variant="light" icon={FiRefreshCw} loading={refreshing} disabled={busy}
-              title="Re-read the marketplaces, ignoring anything cached. Uses API quota."
-              onClick={() => run({ force: true })}>
-              Refresh
-            </Button>
-          )}>
-          {/* Shown whatever came back. It is the sentence that explains an
-              answer that looks wrong but is not: a storefront that answered in
-              place of the one asked for, a parent product instead of the
-              variant, or a price left out because the reader is quoted an
-              import price rather than the shelf price. */}
-          {channel?.note && (
-            <div className="field-note mb-3" style={{ maxWidth: 'none' }}>
-              <FiAlertCircle size={15} />
-              <span>{channel.note}</span>
-            </div>
-          )}
-
-          {judged && (
-            <JudgedListings result={channel}
-              // Offered only when the search was BY an identifier. On a title
-              // search every card would re-run a near-identical query.
-              onFindSimilar={form.key === 'TITLE' ? undefined : findSimilar}
-              similarBusy={rivalsBusy} />
-          )}
-
-          {/* Only when judging did NOT run — with verdicts on screen, a blanket
-              "these are lookalikes" banner says less than the per-listing
-              conflicts and confidence do, and contradicts a confirmed match. */}
-          {/* NOT_JUDGED. `message` explains why nothing was checked; `retryable`
-              separates a provider that fell over from one that was never
-              configured — retrying the latter forever was the old behaviour. */}
-          {!judged && channel?.message && (
-            <div className={`field-note ${channel.retryable ? 'field-note--warn' : ''} mb-3 align-items-center`}
-              style={{ maxWidth: 'none' }}>
-              <FiAlertCircle size={15} />
-              <span className="flex-grow-1">{channel.message}</span>
-              {channel.retryable && (
-                <Button write variant="light" icon={FiRotateCcw} loading={busy} className="flex-shrink-0"
-                  onClick={() => run()}>Try again</Button>
-              )}
-            </div>
-          )}
-
-          {!judged && channel?.items?.length > 0 && !channel.resolvedIdentifierType && (
-            <div className="field-note field-note--warn mb-3" style={{ maxWidth: 'none' }}>
-              <FiAlertCircle size={15} />
-              <span>
-                <strong>Matched on title, not an identifier.</strong>{' '}
-                These are lookalikes — confirm each before treating it as the same product.
-              </span>
-            </div>
-          )}
-
-          {!judged && channel?.items?.length > 0 ? (
-            <>
-              <div className="text-muted small mb-2">
-                {channel.totalResults} result{channel.totalResults === 1 ? '' : 's'}
-                {channel.resolvedQuery && <> for <strong>{channel.resolvedQuery}</strong></>}
-              </div>
-              <div className="row g-2">
-                {channel.items.map((item, i) => {
-                  return (
-                    <div className="col-12 col-lg-6" key={item.marketplaceItemId || i}>
-                      <div className="result-card">
-                        <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                          <MarketplaceLogo marketplace={item.marketplace || hitMarket}
-                            storefront={item.storefront} />
-                          <div className="fw-semibold clamp-2 mt-2">{item.title || 'Untitled listing'}</div>
-                          <div className="text-muted small mt-1 d-flex flex-wrap gap-2">
-                            {item.marketplaceItemId && <span className="font-monospace">{item.marketplaceItemId}</span>}
-                            {item.seller && <span>· {item.seller}</span>}
-                            <span>· {item.condition || 'condition not stated'}</span>
-                          </div>
-                          <ItemIdentifiers identifiers={item.identifiers} />
-                          <div className="mt-1">
-                            {item.price != null
-                              ? (
-                                <>
-                                  <strong>{formatCurrency(item.price, item.currency || 'USD')}</strong>
-                                  <EstimatedBadge estimated={item.priceEstimated} note={item.priceNote} />
-                                </>
-                              )
-                              : (
-                                <span className="text-muted small"
-                                  title="Amazon prices by the visitor's location, so this storefront quotes an import price rather than its shelf price. A converted figure would be wrong by shipping and duty.">
-                                  Price unavailable from this region
-                                </span>
-                              )}
-                            {item.shipping > 0 && (
-                              <span className="text-muted small ms-2">
-                                + {formatCurrency(item.shipping, item.currency || 'USD')} shipping
-                              </span>
-                            )}
-                          </div>
-                          <div className="d-flex flex-wrap gap-1 mt-2">
-                            {/* Unjudged results are still real listings, and one
-                                of them is often the product being looked for —
-                                the verdicts being absent says the AI pass did
-                                not run, not that these are worthless. */}
-                            {item.marketplaceItemId && (
-                              <Button write variant="light" icon={FiPackage}
-                                title="Create this as one of your own products"
-                                onClick={() => setAddingListing({
-                                  ...item, marketplace: item.marketplace || hitMarket,
-                                })}>
-                                Add to catalog
-                              </Button>
-                            )}
-                            {hitMarket && item.marketplaceItemId && (
-                              <Link className="btn btn-sm btn-light d-inline-flex align-items-center gap-1"
-                                to={listingPath(hitMarket, item.marketplaceItemId, item.storefront)}>
-                                Details <FiArrowRight />
-                              </Link>
-                            )}
-                            {item.url && (
-                              <a href={item.url} target="_blank" rel="noreferrer"
-                                className="btn btn-sm btn-light d-inline-flex align-items-center gap-1">
-                                Open on marketplace <FiExternalLink size={13} />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          ) : !judged && !channel?.message && (
-            // `note` explains an empty result in a sentence — but on an empty
-            // search the backend now puts that same sentence in `message`, and
-            // both branches rendering it printed the identical box twice.
-            // `message` wins because it is the one that can carry `retryable`.
-            <div className="field-note" style={{ maxWidth: 'none' }}>
-              <FiAlertCircle size={15} />
-              <span>{channel?.note || 'No listings were found in the selected marketplaces.'}</span>
-            </div>
-          )}
-
-          {/* The trace answers "why was that empty" — refused, rate limited and
-              genuinely absent are indistinguishable without it. */}
-          {channel?.steps?.length > 0 && (
-            <div className="mt-3 pt-3 border-top-soft">
-              <div className="form-label mb-2">How this was searched</div>
-              <div className="d-flex flex-column gap-1">
-                {channel.steps.map((st, i) => <StepRow key={i} st={st} />)}
-              </div>
-              {/* FR-SRCH-003 also asks for a correlation ID retained across web,
-                  marketplace, AI and database operations — it is what support
-                  needs to find this exact search in the backend logs. */}
-              {channel.correlationId && (
-                <div className="text-muted small mt-2 font-monospace">
-                  ref {channel.correlationId}
-                  {channel.finishedAt && ` · ${fmtTime(channel.finishedAt)}`}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
+        <ChannelCard channel={channel} judged={judged} hitMarket={hitMarket} busy={busy} refreshing={refreshing}
+          onRefresh={() => run({ force: true })} onRetry={() => run()}
+          // Offered only when the search was BY an identifier. On a title
+          // search every card would re-run a near-identical query.
+          onFindSimilar={form.key === 'TITLE' ? undefined : findSimilar}
+          similarBusy={rivalsBusy} onAdd={setAddingListing} />
       )}
 
       {/* ── Competitors for the product that was found ───────────── */}
@@ -544,60 +375,11 @@ export default function SearchProduct() {
 
       {/* ── Your catalogue ───────────────────────────────────────── */}
       {catalog && (
-        <Card className="mt-3" title={`In your catalogue (${catalog.totalMatches ?? catalogRows.length})`}
-          subtitle="Products you already track. Marketplace listings are above.">
-          {catalogRows.length > 0 ? (
-            <div className="row g-3">{catalogRows.map((p) => <CatalogResult key={p.id} p={p} />)}</div>
-          ) : (
-            <EmptyState icon={FiBox} title="Not in your catalogue yet"
-              message="Nothing here matches. If a marketplace listing above is the right product, add it to your catalogue." />
-          )}
-
-          {catalog.trace?.length > 0 && (
-            <div className="mt-3 pt-3 border-top-soft">
-              <button type="button" className="btn btn-link p-0 text-decoration-none d-flex align-items-center gap-2 fw-semibold"
-                onClick={() => setShowTrace((s) => !s)}>
-                {showTrace ? <FiChevronUp /> : <FiChevronDown />} Match trace ({catalog.trace.length} stages)
-              </button>
-              {showTrace && (
-                <div className="mt-2 d-flex flex-column gap-1">
-                  {catalog.trace.map((t, i) => <TraceRow key={i} t={t} />)}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
+        <CatalogCard catalog={catalog} showTrace={showTrace} onToggleTrace={() => setShowTrace((s) => !s)} />
       )}
 
       {/* ── Visually similar, from the image ─────────────────────── */}
-      {imageHits && imageHits.length > 0 && (
-        <Card className="mt-3" title={`Visually similar in your catalogue (${imageHits.length})`}
-          subtitle="Matched against your own product images — near-identical pictures, not similar items.">
-          <div className="row g-3">
-            {imageHits.map((r) => (
-              <div className="col-12 col-lg-6" key={r.productId}>
-                <Link to={`/products/${r.productId}`} className="result-card text-reset text-decoration-none">
-                  {r.imageUrl
-                    ? <img src={r.imageUrl} alt={r.title} className="rounded-3 flex-shrink-0"
-                      style={{ width: 64, height: 64, objectFit: 'contain', background: 'var(--app-bg)' }} />
-                    : <div className="rounded-3 flex-shrink-0 d-grid"
-                      style={{ width: 64, height: 64, placeItems: 'center', background: 'var(--app-bg)' }}>
-                      <FiImage className="text-muted" />
-                    </div>}
-                  <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                    <div className="fw-semibold clamp-2">{r.title}</div>
-                    <div className="text-muted small mt-1">
-                      {r.sku && <span className="me-2">SKU {r.sku}</span>}
-                      {r.brand && <span>· {r.brand}</span>}
-                    </div>
-                    <span className="mr-pill mr-pill--blue mt-2 d-inline-block">{r.similarityPct}% match</span>
-                  </div>
-                </Link>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {imageHits && imageHits.length > 0 && <ImageHitsCard hits={imageHits} />}
 
       {addingListing && (
         <SaveAsProductModal show onClose={() => setAddingListing(null)} listing={addingListing} />
@@ -611,194 +393,5 @@ export default function SearchProduct() {
         </Card>
       )}
     </>
-  )
-}
-
-// A trace line. `marketplace: "AI"` is not a channel — it is step 6 (judging)
-// or the vision pass on an image, and reading it as a marketplace would print
-// "Ai by MATCH", which says nothing.
-const AI_STEP = { MATCH: 'AI matching', IMAGE: 'Image' }
-
-const fmtTime = (iso) => {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString()
-}
-
-function StepRow({ st }) {
-  const o = outcomeOf(st.outcome)
-  const isAi = st.marketplace === 'AI'
-  return (
-    <div className="d-flex align-items-center flex-wrap gap-2 small">
-      <span className={`mr-pill mr-pill--${o.tone}`}>{o.label}</span>
-      <span className="fw-semibold">
-        {isAi ? (AI_STEP[st.identifierType] || 'AI') : mpLabel(st.marketplace)}
-      </span>
-      <span className="text-muted">
-        {!isAi && `by ${st.identifierType || 'keyword'}`}
-        {/* A channel step's count is listings FOUND. The AI step finds nothing
-            — its count is how many it labelled a match — so it is never
-            printed as "results", which would credit the model with the
-            discovery and is the one thing this panel exists to disambiguate. */}
-        {!isAi && st.resultCount != null && ` · ${st.resultCount} result${st.resultCount === 1 ? '' : 's'}`}
-        {st.fromCache && ' · cached'}
-        {/* When the marketplace actually observed this, which on a cached step
-            is NOT when the search ran. A price can be hours old while the card
-            above says "prices as at" the moment you pressed Search. */}
-        {st.sourceTimestamp && ` · seen ${formatDateTime(st.sourceTimestamp)}`}
-        {st.durationMs != null && `${isAi ? '' : ' · '}${st.durationMs} ms`}
-      </span>
-      {/* What was actually sent to the marketplace. When a search finds
-          nothing, the first question is whether it asked for the right thing —
-          and until now the trace said which TYPE was used but never the value,
-          so a mis-sent query was indistinguishable from an absent product. */}
-      {st.query && (
-        <span className="text-muted font-monospace" style={{ fontSize: 11 }}>
-          “{st.query}”
-        </span>
-      )}
-      {/* On an image step this is what the vision model said it saw — the
-          single most useful line in the trace when the results look wrong. */}
-      {st.detail && <span className="text-muted">— {st.detail}</span>}
-    </div>
-  )
-}
-
-// Price history without leaving the search.
-//
-// Offers everything the judge MATCHED — from the identifier lookup and from the
-// competitor search that follows it. Both are tracked, so both have history,
-// and listing only the first left three of four charts unreachable when the
-// exact search returned one product and the keyword pass found the rest.
-//
-// Rejected lookalikes stay out: they are shown in the results but never
-// tracked, so every one of those entries would open an empty chart, and a
-// picker where most choices lead nowhere teaches people to stop opening it.
-function MatchPriceHistory({ matches, rivals }) {
-  const [sel, setSel] = useState(0)
-
-  // The exact match first, then the competitors, deduplicated — an identifier
-  // search and its keyword follow-up routinely return the same listing, and
-  // charting it twice under two headings reads as two products.
-  const options = useMemo(() => {
-    const seen = new Set()
-    return [...(matches || []), ...(rivals || [])]
-      .filter((m) => {
-        const key = `${m.marketplace}:${m.marketplaceItemId}`
-        if (!m.marketplaceItemId || seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-  }, [matches, rivals])
-
-  // Options change with each search, so an index held from the last one can
-  // point past the end of this one.
-  const active = options[sel] || options[0]
-  if (!active?.marketplaceItemId) return null
-
-  // Short enough that the browser's own dropdown stays near the width of the
-  // box. A native popup is drawn at the width of its longest option and can
-  // not be styled, so a 48-character title plus a price spilled across the
-  // range buttons and into the next card.
-  const label = (m) => {
-    const t = m.title || m.marketplaceItemId || ''
-    const short = t.length > 42 ? `${t.slice(0, 40).trim()}…` : t
-    const where = [mpLabel(m.marketplace), m.storefront].filter(Boolean).join(' ')
-    const price = m.price != null ? formatCurrency(m.price, m.currency || 'USD') : null
-    return [short, where, price].filter(Boolean).join(' · ')
-  }
-
-  return (
-    <>
-      {/* The picker drives both cards below, so it sits above them, on its
-          own row — inside the chart header it fought the range buttons for
-          space. With a single listing there is nothing to choose between, so
-          it is a line of text rather than a dropdown with one option. */}
-      <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
-        <span className="text-muted small">
-          {options.length > 1 ? `Charting 1 of ${options.length} listings:` : 'Charting:'}
-        </span>
-        {options.length > 1 ? (
-          <select className="form-select form-select-sm w-auto" style={{ maxWidth: '100%' }}
-            aria-label="Which listing to chart"
-            value={options.indexOf(active)} onChange={(e) => setSel(Number(e.target.value))}>
-            {options.map((m, i) => (
-              <option key={`${m.marketplace}:${m.marketplaceItemId}`} value={i} title={m.title || ''}>
-                {label(m)}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="small fw-semibold text-truncate" style={{ minWidth: 0 }} title={active.title || ''}>
-            {label(active)}
-          </span>
-        )}
-      </div>
-
-      <div className="row g-3 mt-0">
-        <div className="col-12 col-lg-7">
-          <ItemPriceHistory
-            marketplace={active.marketplace}
-            itemId={active.marketplaceItemId}
-            storefront={active.storefront}
-            currency={active.currency || 'USD'}
-            title="Price history"
-          />
-        </div>
-        <div className="col-12 col-lg-5">
-          <ItemRecentChanges marketplace={active.marketplace} itemId={active.marketplaceItemId}
-            storefront={active.storefront} />
-        </div>
-      </div>
-    </>
-  )
-}
-
-function CatalogResult({ p }) {
-  const img = p.images?.[0]?.url || (typeof p.images?.[0] === 'string' ? p.images[0] : null)
-  return (
-    <div className="col-12 col-lg-6">
-      <div className="result-card">
-        {img ? (
-          <img src={img} alt={p.title} className="rounded-3 flex-shrink-0"
-            style={{ width: 64, height: 64, objectFit: 'cover' }} />
-        ) : (
-          <div className="rounded-3 flex-shrink-0 d-grid"
-            style={{ width: 64, height: 64, placeItems: 'center', background: 'var(--app-bg)', color: 'var(--primary)' }}>
-            <FiBox size={22} />
-          </div>
-        )}
-        <div className="flex-grow-1" style={{ minWidth: 0 }}>
-          <div className="d-flex align-items-start justify-content-between gap-2">
-            <div className="fw-semibold clamp-2">{p.title}</div>
-            {p.status && <StatusBadge status={p.status} />}
-          </div>
-          <div className="text-muted small mt-1">
-            {p.brand && <span className="me-2">{p.brand}</span>}
-            {p.sku && <span>· SKU {p.sku}</span>}
-          </div>
-          <Link to={`/products/${p.id}`} className="btn btn-sm btn-light d-inline-flex align-items-center gap-1 mt-2">
-            Open in my catalogue <FiArrowRight />
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const TRACE_ICON = {
-  MATCHED: <FiCheckCircle className="text-success" />,
-  NO_MATCH: <FiXCircle className="text-muted" />,
-  SKIPPED: <FiMinusCircle className="text-muted" />,
-}
-
-function TraceRow({ t }) {
-  return (
-    <div className="d-flex align-items-center gap-2 small">
-      <span className="flex-shrink-0">{TRACE_ICON[t.status] || <FiMinusCircle className="text-muted" />}</span>
-      <span className="fw-semibold" style={{ width: 64 }}>{t.stage}</span>
-      <span className={t.status !== 'MATCHED' ? 'text-muted' : ''}>
-        {t.note}{t.matchCount ? ` (${t.matchCount})` : ''}
-      </span>
-    </div>
   )
 }

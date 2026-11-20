@@ -7,6 +7,7 @@ import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import { useAuth } from '../../context/AuthContext'
 import { aiService } from '../../services/aiService'
+import { errorMessage } from '../../services/apiError'
 
 // GET /ai/analyst/suggestions + POST /ai/analyst/ask
 //
@@ -50,7 +51,7 @@ export default function AIAnalyst() {
       setMessages((m) => [...m, {
         role: 'analyst',
         error: true,
-        answer: err?.message || 'Something went wrong. Please try again.',
+        answer: errorMessage(err, 'Something went wrong. Please try again.'),
       }])
     } finally {
       setTyping(false)

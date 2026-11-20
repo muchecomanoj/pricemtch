@@ -11,6 +11,7 @@ import StatusBadge from '../../components/common/StatusBadge'
 import { siteAdminService } from '../../services/siteAdminService'
 import { useNotification } from '../../context/NotificationContext'
 import { formatDateTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // What visitors sent through the public website: demo requests, contact
 // messages and newsletter sign-ups. Demo requests and messages are worked
@@ -104,7 +105,7 @@ function HandledList({ kind }) {
       notify.success(handled ? 'Marked as handled' : 'Moved back to pending')
       qc.invalidateQueries({ queryKey: ['submissions'] })   // the list and the tab badges
     },
-    onError: (e) => notify.error(e.message || 'Could not update it'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not update it')),
   })
 
   const rows = q.data?.content || []

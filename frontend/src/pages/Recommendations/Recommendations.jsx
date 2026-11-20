@@ -18,6 +18,8 @@ import { productService } from '../../services/productService'
 import { useNotification } from '../../context/NotificationContext'
 import { useAuth } from '../../context/AuthContext'
 import { formatCurrency, formatRelativeTime } from '../../utils/format'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 // GET /recommendations?status=DRAFT — the pending queue.
 // POST /recommendations/generate | /{id}/approve | /{id}/reject
@@ -53,7 +55,7 @@ export default function Recommendations() {
   const { can } = useAuth()
   const canManage = can('MANAGE_PRICING')
   const [page, setPage] = useState(1)
-  const [status, setStatus] = useState('DRAFT')
+  const [status, setStatus] = useStoredState('recommendations.status', 'DRAFT')
   const [productLabel, setProductLabel] = useState('')
 
   // GET /recommendations has no productId param, but the per-product endpoint
@@ -91,7 +93,7 @@ export default function Recommendations() {
       notify.success(n != null ? `${n} recommendation${n === 1 ? '' : 's'} generated` : 'Recommendations generated')
       refresh()
     },
-    onError: (err) => notify.error(err?.message || 'Could not generate recommendations.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not generate recommendations.')),
   })
 
   const decide = useMutation({
@@ -121,7 +123,7 @@ export default function Recommendations() {
         refresh()
         return
       }
-      notify.error(err?.message || 'Action failed.')
+      notify.error(errorMessage(err, 'Action failed.'))
     },
   })
 
@@ -180,7 +182,7 @@ export default function Recommendations() {
       {isError ? (
         <Card>
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load recommendations.'}
+            {errorMessage(error, 'Could not load recommendations.')}
           </div>
         </Card>
       ) : isLoading ? (

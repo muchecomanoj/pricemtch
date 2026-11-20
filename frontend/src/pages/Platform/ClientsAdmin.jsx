@@ -20,6 +20,7 @@ import { daysUntil } from '../../utils/format'
 import { planPeriodLabel } from '../../utils/plans'
 import { PAGE_SIZE, TIMEZONES, DEFAULT_TIMEZONE, timezoneLabel } from '../../constants'
 import { appUrl } from '../../utils/appPath'
+import { errorMessage } from '../../services/apiError'
 
 // Deterministic gradient avatar per company, so rows are easier to scan.
 const AVATAR_GRADS = [
@@ -109,12 +110,12 @@ export default function ClientsAdmin() {
       setWelcome({ email, link: appUrl(`/activate?token=${token}`) })
       notify.success('Client created — welcome email sent')
     },
-    onError: (e) => notify.error(e.message || 'Save failed'),
+    onError: (e) => notify.error(errorMessage(e, 'Save failed')),
   })
   const statusMut = useMutation({
     mutationFn: ({ id, action }) => clientService.setStatus(id, action),
     onSuccess: (_, { action }) => { invalidate(); notify.success(`Client ${action}d`) },
-    onError: (e) => notify.error(e.message || 'Action failed'),
+    onError: (e) => notify.error(errorMessage(e, 'Action failed')),
   })
   // Clients are never hard-deleted from this screen — use Suspend instead.
 

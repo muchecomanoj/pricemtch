@@ -151,7 +151,7 @@ export const ENDPOINTS = {
     resume: (id) => `/admin/clients/${id}/resume`,
     stats: (id) => `/admin/clients/${id}/stats`,
     usage: (id) => `/admin/clients/${id}/usage`,
-    payments: (id) => `/admin/clients/${id}/payments`,   // GET ?page&size — this client's payments
+    payments: (id) => `/admin/clients/${id}/payments`,   // GET ?month&status&type&from&to&page&size — this client's payments
     resendActivation: (id) => `/admin/clients/${id}/resend-activation`,
     sub: {
       assign: (t) => `/admin/clients/${t}/subscription/assign`,
@@ -223,7 +223,7 @@ export const ENDPOINTS = {
     subDowngrade: '/client/subscription/downgrade',          // POST ?planCode= (empty body)
     // POST ?billingCycle= (optional). Renews the CURRENT plan — no plan code.
     subRenew: '/client/subscription/renew',
-    payments: '/client/payments',                            // GET ?page&size
+    payments: '/client/payments',                            // GET ?month&status&type&from&to&page&size
   },
   // Public (no auth) — marketing site content + lead capture.
   publicSite: {
@@ -343,8 +343,8 @@ export const ENDPOINTS = {
   // opposite: it creates products and never calls Amazon. One file, two
   // deliberately different destinations.
   bulkSearch: {
-    root: '/search/bulk',                                    // POST multipart ?judge&country&postalCode | GET ?page&size
-    job: (id) => `/search/bulk/${id}`,
+    root: '/search/bulk',                                    // POST multipart ?judge&region&country&postalCode | GET ?page&size
+    job: (id) => `/search/bulk/${id}`,                       // GET | DELETE (finished runs only)
     rows: (id) => `/search/bulk/${id}/rows`,                 // GET ?status&page&size
     save: (jobId, rowId) => `/search/bulk/${jobId}/rows/${rowId}/save`,  // POST ?sku
   },

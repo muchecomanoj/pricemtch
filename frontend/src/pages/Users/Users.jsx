@@ -13,6 +13,7 @@ import StatusBadge from '../../components/common/StatusBadge'
 import { userService } from '../../services/catalogService'
 import { useNotification } from '../../context/NotificationContext'
 import { ASSIGNABLE_ROLES, ROLE_LABELS, ROLES } from '../../constants'
+import { errorMessage } from '../../services/apiError'
 
 export default function Users() {
   // Plain write buttons lock themselves while the plan is read-only.
@@ -38,7 +39,7 @@ export default function Users() {
   const removeMut = useMutation({
     mutationFn: (id) => userService.remove(id),
     onSuccess: () => { refreshTeam(); notify.success('User removed') },
-    onError: (e) => notify.error(e.message || 'Could not remove the user'),
+    onError: (e) => notify.error(errorMessage(e, 'Could not remove the user')),
   })
   const openForm = (u) => { saveMut.reset(); setEditing(u) }
 
@@ -47,7 +48,7 @@ export default function Users() {
   const resetPwMut = useMutation({
     mutationFn: (id) => userService.resetPassword(id),
     onSuccess: () => notify.success('Password reset initiated'),
-    onError: (e) => notify.error(e.message || 'Reset failed'),
+    onError: (e) => notify.error(errorMessage(e, 'Reset failed')),
   })
   const handleReset = async (u) => {
     if (await confirm({ text: `Reset password for ${u.name}?`, confirmText: 'Reset' })) resetPwMut.mutate(u.id)
@@ -144,7 +145,7 @@ function UserForm({ defaultValues, onSubmit, onCancel, submitting, error }) {
       {error && (
         <div className="col-12">
           <div className="alert alert-danger small mb-0">
-            <div className="fw-semibold">{error.message || 'Could not save the user.'}</div>
+            <div className="fw-semibold">{errorMessage(error, 'Could not save the user.')}</div>
             {isUserLimit(error.message) && (
               <div className="mt-1">
                 Deactivated users still use a seat — delete unused accounts or upgrade your plan.{' '}

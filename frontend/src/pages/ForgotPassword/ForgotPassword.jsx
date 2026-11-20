@@ -11,6 +11,7 @@ import PasswordStrength, { isStrongPassword } from '../../components/onboarding/
 import { authService } from '../../services/authService'
 import { useNotification } from '../../context/NotificationContext'
 import { APP_NAME } from '../../constants'
+import { errorMessage } from '../../services/apiError'
 
 // ── Self-service password reset ─────────────────────────────────────────────
 // Mirrors the live 3-step contract:
@@ -115,7 +116,7 @@ function EmailStep({ initial, onSent }) {
       notify.success(`We sent a reset code to ${email}`)
       onSent(email)
     } catch (e) {
-      notify.error(e.message || 'Could not send the reset code')
+      notify.error(errorMessage(e, 'Could not send the reset code'))
     }
   }
 
@@ -164,7 +165,7 @@ function CodeStep({ email, onVerified, onBack }) {
       await authService.verifyResetCode(email, value)
       onVerified(value)
     } catch (e) {
-      notify.error(e.message || 'That code is not valid')
+      notify.error(errorMessage(e, 'That code is not valid'))
     } finally { setBusy(false) }
   }
 
@@ -175,7 +176,7 @@ function CodeStep({ email, onVerified, onBack }) {
       notify.success('We sent a new code')
       setCode('')
     } catch (e) {
-      notify.error(e.message || 'Could not resend the code')
+      notify.error(errorMessage(e, 'Could not resend the code'))
     } finally { setResending(false) }
   }
 
@@ -219,7 +220,7 @@ function PasswordStep({ email, code, onDone, onBack }) {
       notify.success('Your password has been reset')
       onDone()
     } catch (e) {
-      notify.error(e.message || 'Could not reset your password')
+      notify.error(errorMessage(e, 'Could not reset your password'))
     }
   }
 

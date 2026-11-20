@@ -14,6 +14,8 @@ import { formatCurrency, formatDate, formatRelativeTime } from '../../utils/form
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
 import { mpLabel, shortItemId, listingPath } from '../../utils/marketplaces'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 20
 
@@ -25,7 +27,7 @@ export default function TrackedItems() {
   const [page, setPage] = useState(1)            // UI is 1-based, API is 0-based
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [marketplace, setMarketplace] = useState('')
+  const [marketplace, setMarketplace] = useStoredState('trackedItems.marketplace', '')
   const { codes: marketplaces } = useMarketplaceCodes()
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export default function TrackedItems() {
 
         {isError ? (
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load tracked items.'}
+            {errorMessage(error, 'Could not load tracked items.')}
           </div>
         ) : (
           <>

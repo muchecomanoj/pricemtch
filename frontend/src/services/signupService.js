@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ENDPOINTS } from './apiEndpoints'
 import { mockResponse } from '../mock/mockHelper'
 import { appUrl } from '../utils/appPath'
+import { normalizeApiError } from './apiError'
 
 // ---------------------------------------------------------------------------
 // Public self-signup — aligned to the live contract:
@@ -33,17 +34,7 @@ publicApi.interceptors.response.use(
     if (b && typeof b === 'object' && 'success' in b && 'data' in b) res.data = b.data
     return res
   },
-  (error) => {
-    if (error.code === 'ECONNABORTED') {
-      error.message = 'The server took too long to respond. Please try again in a moment.'
-    } else if (!error.response) {
-      error.message = 'Could not reach the server. Check your connection and try again.'
-    } else {
-      const msg = error.response.data?.message
-      if (msg) error.message = msg
-    }
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(normalizeApiError(error))
 )
 
 export const signupService = {

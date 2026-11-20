@@ -10,6 +10,7 @@ import StatusBadge from '../../components/common/StatusBadge'
 import { siteAdminService } from '../../services/siteAdminService'
 import { useNotification } from '../../context/NotificationContext'
 import { formatDateTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // The landing page's text, one section at a time, as JSON. The sections have
 // different shapes, so a JSON box per section is the honest v1 — a form per
@@ -55,7 +56,7 @@ export default function LandingContentAdmin() {
         actions={<Link to="/home" target="_blank" className="btn btn-light d-inline-flex align-items-center gap-2"><FiExternalLink /> View live page</Link>} />
 
       {isLoading && <Loader label="Loading sections…" />}
-      {isError && <div className="alert alert-danger">{error?.message || 'Could not load the landing content.'}</div>}
+      {isError && <div className="alert alert-danger">{errorMessage(error, 'Could not load the landing content.')}</div>}
       {!isLoading && !isError && sections.length === 0 && (
         <div className="alert alert-info">No sections yet. The live page is showing its built-in copy.</div>
       )}
@@ -96,7 +97,7 @@ function SectionEditor({ section }) {
       await qc.invalidateQueries({ queryKey: ['landing-content'] })
       qc.invalidateQueries({ queryKey: ['public', 'landing'] })
     } catch (e) {
-      setError(e.message || 'Could not save this section')
+      setError(errorMessage(e, 'Could not save this section'))
     } finally { setBusy(false) }
   }
 

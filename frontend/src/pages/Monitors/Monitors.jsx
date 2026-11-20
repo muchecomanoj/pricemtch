@@ -16,6 +16,7 @@ import { mpLabel } from '../../utils/marketplaces'
 import { useNotification } from '../../context/NotificationContext'
 import { useAuth, useWriteLock } from '../../context/AuthContext'
 import { formatRelativeTime } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // Scheduled competitor discovery. Without this every product has to be searched
 // by hand, which is why most of a catalog never gets checked — and why the trend
@@ -74,7 +75,7 @@ export default function Monitors() {
   const toggle = useMutation({
     mutationFn: ({ id, enabled }) => monitorService.update(id, { enabled }),
     onSuccess: (_d, { enabled }) => { notify.success(enabled ? 'Monitoring resumed' : 'Monitoring paused'); refresh() },
-    onError: (err) => notify.error(err?.message || 'Could not change the monitor.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not change the monitor.')),
   })
 
   // Monitors picked for a bulk action, held as ids so a refresh can't swap the
@@ -112,12 +113,12 @@ export default function Monitors() {
   const bulkEnabled = useMutation({
     mutationFn: ({ ids, enabled }) => monitorService.setEnabledMany(ids, enabled),
     onSuccess: (count, { ids, enabled }) => reportBulk(count, ids.length, enabled ? 'resumed' : 'paused'),
-    onError: (err) => notify.error(err?.message || 'Could not change those monitors.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not change those monitors.')),
   })
   const bulkRemove = useMutation({
     mutationFn: (ids) => monitorService.removeMany(ids),
     onSuccess: (count, ids) => reportBulk(count, ids.length, 'deleted'),
-    onError: (err) => notify.error(err?.message || 'Could not delete those monitors.'),
+    onError: (err) => notify.error(errorMessage(err, 'Could not delete those monitors.')),
   })
   // Only monitors whose state would actually change are sent.
   const setPickedEnabled = (enabled) => {
@@ -153,7 +154,7 @@ export default function Monitors() {
       notify.success('Monitoring stopped')
       refresh()
     } catch (err) {
-      notify.error(err?.message || 'Could not stop the monitor.')
+      notify.error(errorMessage(err, 'Could not stop the monitor.'))
     }
   }
 
@@ -161,8 +162,8 @@ export default function Monitors() {
     {
       key: 'product',
       header: 'Product',
-      width: '30%',
-      minWidth: 220,
+      width: '20%',
+      minWidth: 180,
       render: (m) => (
         // Wraps to a second line rather than stretching the column. The
         // max-width is what makes the clamp engage — see .clamp-2.
@@ -210,6 +211,12 @@ export default function Monitors() {
       key: 'lastStatus',
       header: 'Status',
       render: (m) => <MonitorStatus monitor={m} />,
+    },
+    {
+      key: 'lastMessage',
+      header: 'Last result',
+      minWidth: 210,
+      render: (m) => <MonitorResult monitor={m} />,
     },
     {
       key: 'actions',
@@ -312,7 +319,7 @@ export default function Monitors() {
         show={editing !== null}
         onClose={closeModal}
         result={bulkResult}
-        error={save.isError ? (save.error?.message || 'Could not save the monitor.') : null}
+        error={save.isError ? (errorMessage(save.error, 'Could not save the monitor.')) : null}
         onBackFromResult={() => setBulkResult(null)}
         onSave={save.mutate}
         saving={save.isPending}
@@ -326,26 +333,39 @@ export default function Monitors() {
 }
 
 // A failed run does not stop the schedule, so the row must not read like it has
-// been switched off — it says the last run failed, and why.
+// been switched off — it says the last run failed. The reason is in Last result.
 function MonitorStatus({ monitor }) {
   if (!monitor.enabled) return <StatusBadge status="INACTIVE" label="Paused" />
-  if (monitor.lastStatus === 'FAILED') {
-    return (
-      <div>
-        <StatusBadge status="REJECTED" label="Last run failed" />
-        {monitor.lastMessage && (
-          <div className="text-muted mt-1" style={{ fontSize: 11, maxWidth: 260 }}>{monitor.lastMessage}</div>
-        )}
-      </div>
-    )
-  }
+  if (monitor.lastStatus === 'FAILED') return <StatusBadge status="REJECTED" label="Last run failed" />
   if (!monitor.lastRunAt) return <StatusBadge status="DRAFT" label="Scheduled" />
+  return <StatusBadge status="ACTIVE" label="Active" />
+}
+
+// What the last run did: found by search, re-checked, no longer listed.
+function MonitorResult({ monitor }) {
+  if (!monitor.lastRunAt) return <span className="text-muted small">—</span>
+  if (monitor.lastStatus === 'FAILED') {
+    return <div className="text-muted small" style={{ maxWidth: 260 }}>{monitor.lastMessage || '—'}</div>
+  }
+  // The backend sends one line joined by " · ". The parts that start with a
+  // number are the run's counts; a sentence is a warning, too long for this
+  // column, so it is shortened here and shown in full on hover.
+  const parts = (monitor.lastMessage || '').split(' · ').filter(Boolean)
+  const counts = parts.filter((p) => /^\d/.test(p))
+  const notes = parts.filter((p) => !/^\d/.test(p))
   return (
-    <div>
-      <StatusBadge status="ACTIVE" label="Active" />
-      <div className="text-muted mt-1" style={{ fontSize: 11 }}>
-        {monitor.lastResultCount ?? 0} listing{monitor.lastResultCount === 1 ? '' : 's'} last run
+    <div className="small" style={{ maxWidth: 260 }}>
+      {/* Only a run that reports no counts falls back to the listing total. */}
+      <div className="text-muted">
+        {counts.join(' · ')
+          || `${monitor.lastResultCount ?? 0} listing${monitor.lastResultCount === 1 ? '' : 's'} last run`}
       </div>
+      {notes.length > 0 && (
+        <div className="text-warning d-inline-flex align-items-center gap-1 mt-1" title={notes.join(' ')}>
+          <FiAlertTriangle size={12} className="flex-shrink-0" />
+          {notes.some((n) => /ASIN/.test(n)) ? 'Check the ASIN' : 'See note'}
+        </div>
+      )}
     </div>
   )
 }

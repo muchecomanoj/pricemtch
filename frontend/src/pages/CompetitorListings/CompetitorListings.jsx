@@ -14,6 +14,8 @@ import { formatRelativeTime } from '../../utils/format'
 import { mpLabel } from '../../utils/marketplaces'
 import { useMarketplaceCodes } from '../../hooks/useMarketplaces'
 import { MarginCell, LandedPrice } from '../../components/common/ListingCells'
+import { useStoredState } from '../../hooks/useStoredState'
+import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 20
 const CONDITIONS = ['NEW', 'USED', 'REFURBISHED']
@@ -32,9 +34,9 @@ export default function CompetitorListings() {
   const [page, setPage] = useState(1)            // UI is 1-based, API is 0-based
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')       // debounced value actually queried
-  const [marketplace, setMarketplace] = useState('')
-  const [condition, setCondition] = useState('')
-  const [matchStatus, setMatchStatus] = useState('')
+  const [marketplace, setMarketplace] = useStoredState('competitorListings.marketplace', '')
+  const [condition, setCondition] = useStoredState('competitorListings.condition', '')
+  const [matchStatus, setMatchStatus] = useStoredState('competitorListings.matchStatus', '')
   // Channels come from the API — a hardcoded list sends filters it rejects.
   const { codes: marketplaces } = useMarketplaceCodes()
 
@@ -166,7 +168,7 @@ export default function CompetitorListings() {
 
         {isError ? (
           <div className="alert alert-danger py-2 small mb-0">
-            {error?.message || 'Could not load competitor listings.'}
+            {errorMessage(error, 'Could not load competitor listings.')}
           </div>
         ) : (
           <>

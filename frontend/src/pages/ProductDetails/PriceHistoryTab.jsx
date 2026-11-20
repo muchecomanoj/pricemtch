@@ -126,14 +126,15 @@ export default function PriceHistoryTab({
     }
     : null
 
-  // When the monitor last looked at this listing, whatever it found. A
-  // monitor re-checks only the listings its own search returns that run, so a
-  // listing can go unchecked for weeks — worth saying, since it is the other
-  // reason a chart stays flat.
+  // When we last looked at this listing, and when it was last actually there.
+  // They differ for a listing that has ended: lastFetchedAt moves on while
+  // lastSeenAt stays put, so the dead listing never shows today's date as seen.
   const listing = chartable.find((c) => c.id === activeId)
   const lastSeen = listing?.lastSeenAt ? new Date(listing.lastSeenAt) : null
+  const lastChecked = listing?.lastFetchedAt ? new Date(listing.lastFetchedAt) : lastSeen
   const rangeStart = new Date(Date.now() - Number(range) * 86400000)
-  const unchecked = lastSeen && lastSeen < rangeStart
+  const unchecked = lastChecked && lastChecked < rangeStart
+  const notSeenSince = lastSeen && lastChecked && formatDate(lastSeen) !== formatDate(lastChecked) && lastSeen < lastChecked
   const ccy = last?.currency || listing?.currency || 'USD'
 
   return (
@@ -170,10 +171,10 @@ export default function PriceHistoryTab({
               ? <>No price change in this range — <strong>{formatCurrency(last.itemPrice, ccy)}</strong> since {formatDate(last.observedAt)}. </>
               : <>{inRange.length} price change{inRange.length === 1 ? '' : 's'} in this range. </>}
             A price is recorded only when it changes; between changes the line holds the last price.{' '}
-            {lastSeen && (unchecked
-              ? <>This listing hasn&apos;t been re-checked since <strong>{formatDate(lastSeen)}</strong> — a monitor
-                re-checks only the listings its search returns on each run.</>
-              : <>Last checked {formatRelativeTime(lastSeen)}.</>)}
+            {lastChecked && (unchecked
+              ? <>This listing hasn&apos;t been re-checked since <strong>{formatDate(lastChecked)}</strong>.</>
+              : <>Last checked {formatRelativeTime(lastChecked)}.</>)}
+            {notSeenSince && <> Last seen on the marketplace <strong>{formatDate(lastSeen)}</strong>.</>}
           </span>
         </div>
       )}

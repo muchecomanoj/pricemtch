@@ -6,6 +6,7 @@ import ChartCard from '../../components/charts/ChartCard'
 import EmptyState from '../../components/common/EmptyState'
 import { productIntelService } from '../../services/productIntelService'
 import { formatCurrency } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // GET /products/{id}/profitability/trend?from&to  (dates as YYYY-MM-DD)
 //
@@ -106,7 +107,7 @@ export default function NetProfitTrend({ productId, currency = 'USD' }) {
     return (
       <Card title="Net profit trend" className="h-100">
         <div className="alert alert-danger py-2 small mb-0">
-          {error?.message || 'Could not load the profitability trend.'}
+          {errorMessage(error, 'Could not load the profitability trend.')}
         </div>
       </Card>
     )

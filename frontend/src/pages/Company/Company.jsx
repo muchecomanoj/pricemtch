@@ -15,6 +15,7 @@ import { useNotification } from '../../context/NotificationContext'
 import { TIMEZONES, timezoneLabel } from '../../constants'
 import { CURRENCIES } from '../../mock/onboarding'
 import { formatDate } from '../../utils/format'
+import { errorMessage } from '../../services/apiError'
 
 // Tenant self-service — GET/PUT /client/company.
 // The form covers every field on UpdateTenantRequest; TenantResponse carries
@@ -35,7 +36,7 @@ export default function Company() {
       notify.success('Company profile saved')
       qc.invalidateQueries({ queryKey: ['company'] })
     },
-    onError: (e) => notify.error(e.message || 'Save failed'),
+    onError: (e) => notify.error(errorMessage(e, 'Save failed')),
   })
 
   if (isLoading) return <Loader />

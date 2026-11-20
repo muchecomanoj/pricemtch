@@ -50,11 +50,11 @@ export default function CompetingSellers({ mp, itemId, identifiers, currency = '
     if (a.buyBox !== b.buyBox) return a.buyBox ? -1 : 1
     return (landed(a) ?? Infinity) - (landed(b) ?? Infinity)
   })
-  // Set when the public product page was read, which names only the Buy Box
-  // winner. One row then says nothing about how many sellers there are, so the
-  // note goes above the table and the lowest/median/highest line is dropped.
+  // The backend's note about these offers, shown once above the table. When the
+  // page named only the Buy Box winner, one row says nothing about how many
+  // sellers there are, so the lowest/median/highest line is dropped too.
   const offersNote = offers.find((o) => o.priceNote)?.priceNote
-  const s = offersNote ? null : stats(offers)
+  const s = offersNote && offers.length === 1 ? null : stats(offers)
 
   // Only Amazon shares one listing between sellers, so it is the only place
   // this panel can have an answer. eBay returns a payload we cannot parse into
@@ -191,7 +191,7 @@ export default function CompetingSellers({ mp, itemId, identifiers, currency = '
 
             {/* Amazon's offers API returns a merchant ID and no name, so these
                 are IDs by design rather than a field that failed to load. */}
-            {sorted.some((o) => !o.sellerName) && (
+            {sorted.every((o) => !o.sellerName) && (
               <div className="text-muted mt-2" style={{ fontSize: 11 }}>
                 Amazon identifies sellers by ID, not by name.
               </div>

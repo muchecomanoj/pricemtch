@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { FiCheckCircle, FiAlertCircle } from 'react-icons/fi'
 import Button from '../common/Button'
 import { publicService } from '../../services/publicService'
+import { errorMessage } from '../../services/apiError'
 
 // The three public lead forms: Book a demo, Contact us, Newsletter.
 //
@@ -51,7 +52,7 @@ function useLeadForm(send, fields) {
       // An error for a field this form doesn't show still has to be seen.
       const stray = Object.keys(byField).filter((k) => !fields.includes(k)).map((k) => byField[k])
       if (!onForm.length || stray.length) {
-        setStatus({ ok: false, text: stray[0] || e.message || 'Something went wrong. Please try again.' })
+        setStatus({ ok: false, text: stray[0] || errorMessage(e, 'Something went wrong. Please try again.') })
       }
     } finally {
       inFlight.current = false
