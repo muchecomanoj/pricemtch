@@ -18,7 +18,9 @@ import { MARKETPLACES } from '../constants'
 // SP-API is not authorised for (GB, DE, IN) is read from the page instead, and
 // that alone takes about twenty seconds. The old 60s judged ceiling cut those
 // off just as they were answering.
-const searchTimeout = ({ judge, image }) => (image ? 120000 : judge ? 90000 : 60000)
+// Room for the backend to answer with its own error. A bounded UK lookup is
+// ~45s, but a cut-off here reads as "offline" and hides the backend's reason.
+const searchTimeout = ({ image }) => (image ? 150000 : 120000)
 
 // The listing reads fall back to the same page reader on those storefronts, and
 // the page opens three of them at once. The global 20s would cut them off.

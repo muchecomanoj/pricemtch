@@ -7,8 +7,9 @@ import {
 import Button from '../../components/common/Button'
 import AttachToProductModal from '../MarketplaceTools/AttachToProductModal'
 import SaveAsProductModal from '../../components/products/SaveAsProductModal'
-import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
+import { ItemIdentifiers, EstimatedBadge, itemCurrency, PriceNote } from '../../components/common/ListingCells'
 import { shortItemId, listingPath } from '../../utils/marketplaces'
+import ProviderError, { isProviderError, isUnpriced, Unpriced, ServedElsewhere, UnpricedCount } from './ProviderError'
 import { scoreTone } from '../../utils/listingToProduct'
 import { useAuth } from '../../context/AuthContext'
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
@@ -149,7 +150,7 @@ export function JudgedRow({ r, onSave, onAddToCatalog, onFindSimilar, similarBus
           {r.price != null
             ? (
               <>
-                <strong>{formatCurrency(r.price, r.currency || 'USD')}</strong>
+                <strong>{formatCurrency(r.price, itemCurrency(r))}</strong>
                 <EstimatedBadge estimated={r.priceEstimated} note={r.priceNote} />
               </>
             )
@@ -161,9 +162,10 @@ export function JudgedRow({ r, onSave, onAddToCatalog, onFindSimilar, similarBus
             )}
           {r.shipping > 0 && (
             <span className="text-muted small ms-2">
-              + {formatCurrency(r.shipping, r.currency || 'USD')} shipping
+              + {formatCurrency(r.shipping, itemCurrency(r))} shipping
             </span>
           )}
+          <PriceNote item={r} />
         </div>
 
         {/* Conflicts first: on a rejection this is the whole answer, and it is
@@ -260,8 +262,10 @@ export function JudgedRow({ r, onSave, onAddToCatalog, onFindSimilar, similarBus
   )
 }
 
+// `onRetry`, when given, offers Try again on a search that could not reach
+// the marketplace (the competitor searches pass it).
 export default function JudgedListings({
-  result, onFindSimilar, similarBusy = false, similarMode = false,
+  result, onFindSimilar, similarBusy = false, similarMode = false, onRetry,
 }) {
   // Open by default. These are real listings the search found, and the reason
   // one was turned down — wrong pack, renewed, different model — is often the
@@ -319,6 +323,13 @@ export default function JudgedListings({
     </div>
   )
 
+
+  // The marketplace was never reached: say so, rather than the empty lists
+  // below, which read as "nothing on the market".
+  if (isProviderError(result)) return <ProviderError result={result} onRetry={onRetry} />
+  // Found, with nothing buyable. No retry: it would answer the same.
+  if (isUnpriced(result)) return <><ServedElsewhere result={result} /><Unpriced result={result} /></>
+
   return (
     <>
       {adding && (
@@ -346,6 +357,9 @@ export default function JudgedListings({
           decision={saveAs(saving)}
         />
       )}
+
+      <ServedElsewhere result={result} />
+      <UnpricedCount result={result} />
 
       {result?.message && (
         <div className={`field-note ${result.retryable ? 'field-note--warn' : ''} mb-3`}

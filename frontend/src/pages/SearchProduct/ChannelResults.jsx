@@ -2,12 +2,13 @@ import { Link } from 'react-router-dom'
 import { FiAlertCircle, FiArrowRight, FiExternalLink, FiPackage, FiRefreshCw, FiRotateCcw } from 'react-icons/fi'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
-import { ItemIdentifiers, EstimatedBadge } from '../../components/common/ListingCells'
+import { ItemIdentifiers, EstimatedBadge, itemCurrency, PriceNote } from '../../components/common/ListingCells'
 import MarketplaceLogo from '../../components/common/MarketplaceLogo'
 import { listingPath } from '../../utils/marketplaces'
 import { formatCurrency } from '../../utils/format'
 import JudgedListings from './JudgedListings'
 import { ChannelTrace, fmtTime } from './SearchTrace'
+import ProviderError, { isProviderError, isUnpriced, Unpriced, ServedElsewhere, UnpricedCount } from './ProviderError'
 
 // The raw item grid, shown when judging did not run.
 function RawListings({ channel, hitMarket, onAdd }) {
@@ -36,7 +37,7 @@ function RawListings({ channel, hitMarket, onAdd }) {
                     {item.price != null
                       ? (
                         <>
-                          <strong>{formatCurrency(item.price, item.currency || 'USD')}</strong>
+                          <strong>{formatCurrency(item.price, itemCurrency(item))}</strong>
                           <EstimatedBadge estimated={item.priceEstimated} note={item.priceNote} />
                         </>
                       )
@@ -48,9 +49,10 @@ function RawListings({ channel, hitMarket, onAdd }) {
                       )}
                     {item.shipping > 0 && (
                       <span className="text-muted small ms-2">
-                        + {formatCurrency(item.shipping, item.currency || 'USD')} shipping
+                        + {formatCurrency(item.shipping, itemCurrency(item))} shipping
                       </span>
                     )}
+                    <PriceNote item={item} />
                   </div>
                   <div className="d-flex flex-wrap gap-1 mt-2">
                     {/* Unjudged results are still real listings, and one
@@ -117,14 +119,25 @@ export default function ChannelCard({
           place of the one asked for, a parent product instead of the
           variant, or a price left out because the reader is quoted an
           import price rather than the shelf price. */}
-      {channel?.note && (
+      {/* The marketplace was never reached: its own case, ahead of everything
+          else, because every other branch below reads as "nothing found". */}
+      {isProviderError(channel) && (
+        <div className="mb-3"><ProviderError result={channel} onRetry={onRetry} busy={busy} /></div>
+      )}
+
+      {/* JudgedListings draws these itself (it is also used without this card). */}
+      {!judged && <ServedElsewhere result={channel} />}
+      {!judged && isUnpriced(channel) && <div className="mb-3"><Unpriced result={channel} /></div>}
+      {!judged && <UnpricedCount result={channel} />}
+
+      {channel?.note && channel.note !== channel.message && (
         <div className="field-note mb-3" style={{ maxWidth: 'none' }}>
           <FiAlertCircle size={15} />
           <span>{channel.note}</span>
         </div>
       )}
 
-      {judged && (
+      {judged && !isProviderError(channel) && (
         <JudgedListings result={channel} onFindSimilar={onFindSimilar} similarBusy={similarBusy} />
       )}
 
@@ -134,7 +147,7 @@ export default function ChannelCard({
       {/* NOT_JUDGED. `message` explains why nothing was checked; `retryable`
           separates a provider that fell over from one that was never
           configured — retrying the latter forever was the old behaviour. */}
-      {!judged && channel?.message && (
+      {!judged && channel?.message && !isProviderError(channel) && !isUnpriced(channel) && (
         <div className={`field-note ${channel.retryable ? 'field-note--warn' : ''} mb-3 align-items-center`}
           style={{ maxWidth: 'none' }}>
           <FiAlertCircle size={15} />
@@ -158,7 +171,7 @@ export default function ChannelCard({
 
       {!judged && channel?.items?.length > 0 ? (
         <RawListings channel={channel} hitMarket={hitMarket} onAdd={onAdd} />
-      ) : !judged && !channel?.message && (
+      ) : !judged && !channel?.message && !isProviderError(channel) && !isUnpriced(channel) && (
         // `note` explains an empty result in a sentence — but on an empty
         // search the backend now puts that same sentence in `message`, and
         // both branches rendering it printed the identical box twice.

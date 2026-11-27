@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
-  FiUploadCloud, FiArrowRight, FiAlertCircle, FiCheckCircle, FiClock, FiTrash2,
+  FiUploadCloud, FiArrowRight, FiAlertCircle, FiCheckCircle, FiClock, FiTrash2, FiRefreshCw,
 } from 'react-icons/fi'
 import PageHeader from '../../components/common/PageHeader'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import Pagination from '../../components/common/Pagination'
 import EmptyState from '../../components/common/EmptyState'
+import { useRetryCooldown } from '../../hooks/useRetryCooldown'
 import { SkeletonRows } from '../../components/common/Skeleton'
 import BulkSearchModal from './BulkSearchModal'
 import BulkRow from './BulkRow'
@@ -22,17 +23,18 @@ import { errorMessage } from '../../services/apiError'
 
 const PAGE_SIZE = 25
 
-// The three outcomes are separate on purpose. "Searched and found nothing" is a
-// bad identifier to correct; "couldn't search" is a failure to retry. Merging
-// them into one error count tells the user to do the wrong thing for half the
-// rows.
+// The outcomes are separate on purpose. "Searched and found nothing" is a bad
+// identifier to correct; "couldn't search" (ERROR) is a failure to retry.
+// Merging them into one count tells the user to do the wrong thing for half
+// the rows. ERROR reads "Not searched", as on the row itself.
 const OUTCOMES = [
   ['', 'All rows'],
   ['FOUND', 'Found something'],
-  ['NONE_MATCHED', 'Nothing matched'],
-  ['NO_LISTINGS', 'No listings'],
+  ['NONE_MATCHED', 'Nothing matched — listings rejected'],
+  ['NO_LISTINGS', 'Nothing matched — no listings'],
+  ['UNPRICED', 'No price'],
   ['NOT_JUDGED', 'Not reviewed'],
-  ['ERROR', 'Failed'],
+  ['ERROR', 'Not searched'],
 ]
 
 // "competitor pricing.xlsx · United Kingdom". Jobs from before the region
@@ -95,9 +97,28 @@ export default function BulkSearch() {
     queryFn: () => bulkSearchService.history({ size: 8 }),
   })
 
+  const qc = useQueryClient()
   useEffect(() => { setPage(1) }, [status, jobId])
 
-  const qc = useQueryClient()
+  // Rows stop polling when the job finishes, so read them once more at that
+  // moment: the last few rows finish between the final two polls.
+  const wasRunning = useRef(false)
+  // One manual retry at a time, and a minute's pause when it left rows still
+  // unsearched: a block by Amazon answers the next try the same way.
+  const cooldown = useRetryCooldown(`bulk:${jobId}`)
+  const { settle } = cooldown
+  const errorRows = job?.errorRows
+  useEffect(() => {
+    // A retry can move rows between "Not searched" and "Nothing matched", so
+    // the history line is refreshed too, or it contradicts the header.
+    if (wasRunning.current && !running) {
+      qc.invalidateQueries({ queryKey: ['bulkSearchRows', jobId] })
+      qc.invalidateQueries({ queryKey: ['bulkSearchHistory'] })
+      settle(errorRows > 0)
+    }
+    wasRunning.current = running
+  }, [running, jobId, qc, settle, errorRows])
+
   const { can } = useAuth()
   const writeLock = useWriteLock()
   const { notify, confirm } = useNotification()
@@ -115,6 +136,28 @@ export default function BulkSearch() {
       if (e?.response?.status === 404) qc.invalidateQueries({ queryKey: ['bulkSearchHistory'] })
     },
   })
+
+  // POST .../retry answers 202 with the job back at PENDING. Writing that into
+  // the cache restarts the 5-second polling at once (refetchInterval reads the
+  // status), and the failed rows flip to Waiting one by one as it runs. No
+  // success toast: nothing has been searched yet, and the progress card is
+  // where the result arrives.
+  const retry = useMutation({
+    mutationFn: () => bulkSearchService.retry(jobId),
+    onMutate: () => cooldown.markRetried(),
+    onSuccess: (j) => {
+      if (j) qc.setQueryData(['bulkSearchJob', jobId], (old) => ({ ...(old || {}), ...j }))
+      qc.invalidateQueries({ queryKey: ['bulkSearchRows', jobId] })
+      qc.invalidateQueries({ queryKey: ['bulkSearchHistory'] })
+    },
+    // 400 when the run is still going or nothing failed — a stale tab. The
+    // message says which; re-reading the job puts the screen right.
+    onError: (e) => {
+      notify.error(errorMessage(e, 'The failed rows could not be retried.'))
+      qc.invalidateQueries({ queryKey: ['bulkSearchJob', jobId] })
+    },
+  })
+  const canRetry = !!job?.errorRows && FINISHED.includes(job.status) && can('MANAGE_PRODUCTS')
 
   const onDeleteJob = async (j) => {
     const ok = await confirm({
@@ -161,7 +204,7 @@ export default function BulkSearch() {
                       </div>
                       <div className="text-muted small mt-1">
                         {j.totalRows} row{j.totalRows === 1 ? '' : 's'}
-                        {' · '}{j.foundRows ?? 0} found · {j.emptyRows ?? 0} empty · {j.errorRows ?? 0} failed
+                        {' · '}{j.foundRows ?? 0} found · {j.emptyRows ?? 0} empty · {j.errorRows ?? 0} not searched
                         {j.startedAt && <> · {formatDateTime(j.startedAt)}</>}
                       </div>
                     </div>
@@ -202,11 +245,30 @@ export default function BulkSearch() {
                   <Stat label="Found" value={job.foundRows} hint="review and save" tone="text-success" />
                   {/* Not merged with failures: nothing matched is a bad
                       identifier to fix, not a request to retry. */}
-                  <Stat label="Nothing matched" value={job.emptyRows} hint="check the identifier" />
-                  <Stat label="Failed" value={job.errorRows} hint="worth retrying" tone={job.errorRows ? 'text-danger' : ''} />
+                  <Stat label="Nothing matched" value={job.emptyRows} hint="searched — no match or no price" />
+                  <Stat label="Not searched" value={job.errorRows} hint="couldn't reach the marketplace — retry" tone={job.errorRows ? 'text-warning-emphasis' : ''} />
                 </div>
 
                 {job.message && <div className="text-muted small mt-3">{job.message}</div>}
+
+                {/* The count is in the button so the scale of what it starts is
+                    plain — "Retry 235 failed rows", not a bare "Retry". */}
+                {canRetry && (
+                  <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
+                    <Button write variant="outline-primary" size="sm" icon={FiRefreshCw}
+                      loading={retry.isPending} disabled={cooldown.secondsLeft > 0}
+                      onClick={() => retry.mutate()}>
+                      {cooldown.secondsLeft > 0
+                        ? `Retry again in ${cooldown.secondsLeft}s`
+                        : `Retry ${job.errorRows} failed row${job.errorRows === 1 ? '' : 's'}`}
+                    </Button>
+                    <span className="text-muted small">
+                      {cooldown.secondsLeft > 0
+                        ? 'These rows were refused again. If Amazon is blocking us, retrying straight away gets the same answer.'
+                        : 'Only the rows that couldn’t be searched run again. Rows that found nothing keep their result.'}
+                    </span>
+                  </div>
+                )}
 
                 <div className="field-note mt-3" style={{ maxWidth: 'none' }}>
                   {running ? <FiClock size={15} /> : <FiCheckCircle size={15} />}
@@ -239,7 +301,7 @@ export default function BulkSearch() {
               ) : (
                 <div className="d-flex flex-column gap-2">
                   {rows.map((r) => (
-                    <BulkRow key={r.id} row={r} />
+                    <BulkRow key={r.id} row={r} jobRegion={job?.region} />
                   ))}
                 </div>
               )}

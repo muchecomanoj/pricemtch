@@ -19,7 +19,7 @@ export const RUNNING = ['PENDING', 'PROCESSING']
 // Statuses a run can be deleted from. The backend refuses the rest.
 export const FINISHED = ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED']
 
-// matchesJson / rejectedJson arrive as JSON STRINGS, unlike the single-search
+// matchesJson / rejectedJson / stepsJson arrive as JSON STRINGS, unlike the single-search
 // response where the same data is a real array. A row whose blob will not parse
 // still renders — losing the whole row over a malformed field would hide the
 // input columns and the message, which are the parts that explain what went
@@ -32,6 +32,10 @@ export function parseListings(raw) {
     return Array.isArray(v) ? v : []
   } catch { return [] }
 }
+
+// stepsJson is the per-channel trace, the same shape as a single search's
+// `steps`. Null on rows searched before it existed: those show no trace.
+export const parseSteps = parseListings
 
 export const bulkSearchService = {
   // POST /search/bulk — returns 202 with the job; it does not wait.
@@ -64,6 +68,16 @@ export const bulkSearchService = {
   async remove(id) {
     if (USE_MOCK) return
     await api.delete(ENDPOINTS.bulkSearch.job(id))
+  },
+
+  // POST /search/bulk/{id}/retry — 202 with the job back at PENDING. Re-runs
+  // only the rows that could not be searched (ERROR); a row that searched and
+  // found nothing is an answer, and asking again costs the same quota for the
+  // same result. 400 while the run is still going or when nothing failed,
+  // each with a message meant to be shown.
+  async retry(id) {
+    if (USE_MOCK) return { id, status: 'PENDING' }
+    return (await api.post(ENDPOINTS.bulkSearch.retry(id))).data
   },
 
   async rows(id, { status, page = 0, size = 25 } = {}) {

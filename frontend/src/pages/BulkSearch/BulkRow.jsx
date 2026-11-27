@@ -8,7 +8,9 @@ import Card from '../../components/common/Card'
 import SaveAsProductModal from '../../components/products/SaveAsProductModal'
 import AttachToProductModal from '../MarketplaceTools/AttachToProductModal'
 import ExistingProductDialog from './ExistingProductDialog'
-import { parseListings } from '../../services/bulkSearchService'
+import { parseListings, parseSteps } from '../../services/bulkSearchService'
+import { ChannelTrace } from '../SearchProduct/SearchTrace'
+import { isProviderError } from '../SearchProduct/ProviderError'
 import { productService } from '../../services/productService'
 import { marketplaceService } from '../../services/marketplaceService'
 import { useDestination } from '../../hooks/useDestination'
@@ -18,12 +20,24 @@ import { useNotification } from '../../context/NotificationContext'
 import { errorMessage } from '../../services/apiError'
 
 // One line of the uploaded file.
+//
+// ERROR is "we never looked": the marketplace could not be reached, so the row
+// says nothing about whether the product exists. It reads "Not searched", not
+// "Failed" — the row is waiting for a retry, not broken. NO_LISTINGS is "we
+// looked and nothing was there", and stays the ordinary neutral result.
+// ERROR is amber, not red: nothing is wrong with the user's data, and red
+// sends them off to fix a file that was never the problem. Any row where a
+// channel failed and nothing was found arrives as ERROR (the backend decides);
+// a judge that read listings and rejected them all stays NONE_MATCHED.
 const STATUS = {
   FOUND: { tone: 'green', label: 'Found' },
-  NONE_MATCHED: { tone: 'orange', label: 'Nothing matched' },
-  NO_LISTINGS: { tone: 'slate', label: 'No listings' },
+  NONE_MATCHED: { tone: 'slate', label: 'Nothing matched' },
+  NO_LISTINGS: { tone: 'slate', label: 'Nothing matched' },
   NOT_JUDGED: { tone: 'blue', label: 'Not reviewed' },
-  ERROR: { tone: 'red', label: 'Failed' },
+  // On the marketplace, with no buyable offer. A real answer (counted under
+  // "Nothing matched" in the job totals), so no retry and nothing amber.
+  UNPRICED: { tone: 'blue', label: 'No price' },
+  ERROR: { tone: 'orange', label: 'Not searched' },
   PENDING: { tone: 'slate', label: 'Waiting' },
 }
 
@@ -52,24 +66,42 @@ const isKeyword = (t) => !t || /TITLE|KEYWORD|QUERY|TEXT/i.test(t)
 // at the first query the marketplace answers at all. Only a completely empty
 // answer widens it; listings judged not-a-match mean the market holds
 // different products, and broadening then just returns more of them.
-async function findCompetitors(seed, destination) {
+//
+// `region` is the storefront the rivals are searched in, worked out by the
+// caller (see rivalRegion).
+async function findCompetitors(seed, region, destination) {
   const ladder = keywordLadder(seed.title)
   const tried = []
   let last = null
   for (const query of ladder) {
     tried.push(query)
     const { channel: payload } = buildPayloads(
-      // The listing's own storefront, so rivals are priced in the same market.
-      { key: 'TITLE', value: query, region: seed.storefront || 'US', image: null }, [], destination,
+      { key: 'TITLE', value: query, region, image: null }, [], destination,
     )
     payload.judge = true
     last = await marketplaceService.channelSearch(payload)
-    if (last?.matches?.length || last?.rejected?.length || last?.items?.length) {
+    // Unreachable is not empty — stop, rather than widen and report "nothing".
+    if (last?.matches?.length || last?.rejected?.length || last?.items?.length || isProviderError(last)) {
       return { title: query, result: last, tried }
     }
   }
   return { title: tried[tried.length - 1] || seed.title, result: last, tried }
 }
+
+// The storefront to look for rivals in, so they are priced in the same market
+// as the row. The listing's own storefront first; then the row's region
+// column, then the region the file was run for. A listing read from a UK page
+// can come back without a storefront, and falling straight to the US then
+// priced a UK product's competitors on amazon.com. 'US' only for jobs from
+// before the region choice existed.
+//
+// A region column is typed by people, so "uk" is read as GB, the code the
+// search expects.
+const rivalRegion = (seed, row, jobRegion) => {
+  const code = String(seed?.storefront || row.inputRegion || jobRegion || 'US').trim().toUpperCase()
+  return code === 'UK' ? 'GB' : code
+}
+
 const norm = (v) => (v == null ? '' : String(v).trim())
 
 function differencesOf(product, form) {
@@ -80,7 +112,7 @@ function differencesOf(product, form) {
     .map((f) => ({ field: f, current: product[f] ?? null, incoming: norm(form[f]), advisory: false }))
 }
 
-export default function BulkRow({ row: r }) {
+export default function BulkRow({ row: r, jobRegion }) {
   const qc = useQueryClient()
   const { notify } = useNotification()
   const [open, setOpen] = useState(false)
@@ -91,9 +123,13 @@ export default function BulkRow({ row: r }) {
   const [existing, setExisting] = useState(null)
   const [updating, setUpdating] = useState(false)
 
-  const st = STATUS[r.status] || { tone: 'slate', label: r.status || 'Unknown' }
   const matches = parseListings(r.matchesJson)
   const rejected = parseListings(r.rejectedJson)
+  const steps = parseSteps(r.stepsJson)
+  const notSearched = r.status === 'ERROR'
+  const st = STATUS[r.status] || { tone: 'slate', label: r.status || 'Unknown' }
+  // Written to be shown as-is; on an ERROR row it is the failed step's sentence.
+  const message = r.message
   const { destination } = useDestination()
 
   // Competitors for a row found by identifier, as a single search shows them.
@@ -104,7 +140,7 @@ export default function BulkRow({ row: r }) {
   const wantsRivals = !isKeyword(r.resolvedIdentifierType) && !!seed?.title
   const rivalsQ = useQuery({
     queryKey: ['bulkRivals', r.id],
-    queryFn: () => findCompetitors(seed, destination),
+    queryFn: () => findCompetitors(seed, rivalRegion(seed, r, jobRegion), destination),
     enabled: open && wantsRivals,
     staleTime: Infinity,
     gcTime: 30 * 60 * 1000,
@@ -205,6 +241,15 @@ export default function BulkRow({ row: r }) {
         )}
       </button>
 
+      {/* Why it wasn't searched, without opening the row: a page of red pills
+          with no reason reads as "the product is missing". */}
+      {!open && notSearched && message && (
+        <div className="px-3 pb-3 small text-truncate text-warning-emphasis"
+          title={message} style={{ marginTop: -6 }}>
+          {message}
+        </div>
+      )}
+
       {open && (
         <div className="px-3 pb-3">
           <div className="text-muted small mb-2 d-flex flex-wrap gap-3">
@@ -215,11 +260,11 @@ export default function BulkRow({ row: r }) {
           </div>
 
           {/* Written to be shown as-is. */}
-          {r.message && (
-            <div className={`field-note ${r.status === 'ERROR' ? 'field-note--warn' : ''} mb-3`}
+          {message && (
+            <div className={`field-note ${notSearched ? 'field-note--warn' : ''} mb-3`}
               style={{ maxWidth: 'none' }}>
               <FiAlertCircle size={15} />
-              <span>{r.message}</span>
+              <span>{message}</span>
             </div>
           )}
 
@@ -248,6 +293,16 @@ export default function BulkRow({ row: r }) {
             </div>
           )}
 
+          {/* Per channel, as on a single search: a refused connector, a rate
+              limit and a bad identifier need different answers, and only the
+              trace tells them apart. Rows searched before the trace existed
+              have none, so nothing is drawn rather than an empty panel. */}
+          {steps.length > 0 && (
+            <div className="mb-3">
+              <ChannelTrace channel={{ steps, correlationId: r.correlationId, finishedAt: r.searchedAt }} />
+            </div>
+          )}
+
           {/* ── Competitors for the product that was found ── */}
           {wantsRivals && (
             <Card className="mt-3" title="Competitors"
@@ -270,7 +325,7 @@ export default function BulkRow({ row: r }) {
               ) : (
                 // similarMode opens the rejected list and renames it: a listing
                 // that is NOT the same product is precisely what was asked for.
-                <JudgedListings result={rivalsQ.data?.result} similarMode />
+                <JudgedListings result={rivalsQ.data?.result} similarMode onRetry={() => rivalsQ.refetch()} />
               )}
             </Card>
           )}
@@ -285,7 +340,9 @@ export default function BulkRow({ row: r }) {
             <span className="text-muted small">
               {matches.length > 0
                 ? 'Use “Add to catalog” on a listing to create it as a product.'
-                : 'Nothing to save from this row.'}
+                : notSearched
+                  ? 'Not searched yet — “Retry failed rows” at the top runs it again.'
+                  : 'Nothing to save from this row.'}
             </span>
           </div>
         </div>

@@ -9,7 +9,7 @@ const OUTCOME = {
   SUCCESS: { tone: 'green', label: 'Found' },
   CACHED: { tone: 'green', label: 'From cache' },
   NO_RESULT: { tone: 'slate', label: 'Not there' },
-  UNPRICED: { tone: 'orange', label: 'No price' },
+  UNPRICED: { tone: 'blue', label: 'No price' },
   SKIPPED: { tone: 'slate', label: 'Skipped' },
   RESTRICTED_ACCESS: { tone: 'red', label: 'Access refused' },
   RATE_LIMITED: { tone: 'orange', label: 'Rate limited' },
@@ -17,6 +17,17 @@ const OUTCOME = {
   PROVIDER_ERROR: { tone: 'red', label: 'Provider error' },
 }
 const outcomeOf = (o) => OUTCOME[o] || { tone: 'slate', label: o || 'Unknown' }
+
+// Outcomes where the channel was never actually searched. The backend writes
+// a plain sentence into a failed step's `detail`, shown as-is; this is only
+// for a failed step that arrives without one.
+const STOPPED = {
+  PROVIDER_ERROR: (mp) => `${mp} couldn't be reached or didn't answer properly, so it wasn't checked.`,
+  RATE_LIMITED: (mp) => `${mp} asked us to slow down, so it wasn't checked.`,
+  RESTRICTED_ACCESS: (mp) => `${mp} refused access, so it wasn't checked.`,
+  AUTHENTICATION_ERROR: (mp) => `Signing in to ${mp} failed, so it wasn't checked.`,
+}
+const isStoppedStep = (st) => !!STOPPED[st?.outcome] && st.marketplace !== 'AI'
 
 // A trace line. `marketplace: "AI"` is not a channel — it is step 6 (judging)
 // or the vision pass on an image, and reading it as a marketplace would print
@@ -62,7 +73,9 @@ function StepRow({ st }) {
       )}
       {/* On an image step this is what the vision model said it saw — the
           single most useful line in the trace when the results look wrong. */}
-      {st.detail && <span className="text-muted">— {st.detail}</span>}
+      {isStoppedStep(st) && !st.detail ? (
+        <span className="text-muted">— {STOPPED[st.outcome](mpLabel(st.marketplace))}</span>
+      ) : st.detail && <span className="text-muted">— {st.detail}</span>}
     </div>
   )
 }

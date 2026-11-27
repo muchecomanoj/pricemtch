@@ -346,6 +346,7 @@ export const ENDPOINTS = {
     root: '/search/bulk',                                    // POST multipart ?judge&region&country&postalCode | GET ?page&size
     job: (id) => `/search/bulk/${id}`,                       // GET | DELETE (finished runs only)
     rows: (id) => `/search/bulk/${id}/rows`,                 // GET ?status&page&size
+    retry: (id) => `/search/bulk/${id}/retry`,               // POST -> 202 job (PENDING); ERROR rows only
     save: (jobId, rowId) => `/search/bulk/${jobId}/rows/${rowId}/save`,  // POST ?sku
   },
 

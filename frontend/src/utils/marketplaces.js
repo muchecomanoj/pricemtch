@@ -85,8 +85,14 @@ const REGION_CURRENCY = {
 export const currencyForRegion = (code) => REGION_CURRENCY[String(code || '').toUpperCase()] || null
 
 // The two-letter storefront a response came from, or null when it does not say.
-export function storefrontCode({ countryCode, marketplaceId } = {}) {
-  const cc = countryCode
+//
+// `storefront` first: on a listing that is where it actually came from, and it
+// can differ from the storefront asked for (the reader falls through, GB to
+// DE). `countryCode` is the result-level field, so a listing that carried only
+// `storefront` used to fall back to the requested region — a German price
+// under a UK flag.
+export function storefrontCode({ storefront, countryCode, marketplaceId } = {}) {
+  const cc = storefront || countryCode
     || /^EBAY_([A-Z]{2})$/.exec(marketplaceId || '')?.[1]
     || AMAZON_MARKETPLACE_COUNTRY[marketplaceId]
   return cc ? String(cc).toUpperCase() : null

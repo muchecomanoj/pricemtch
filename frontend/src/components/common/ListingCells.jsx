@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FiInfo, FiAlertTriangle } from 'react-icons/fi'
 import StatusBadge from './StatusBadge'
 import { formatCurrency } from '../../utils/format'
+import { currencyForRegion } from '../../utils/marketplaces'
 
 // Cells shared by the screens that render a marketplace listing: the two
 // competitor-listing tables, search results, and the listing detail page.
@@ -30,6 +31,20 @@ export function ValueFlag({ status }) {
 // outside the storefront, so Amazon quotes it an import price that reads higher
 // than a local buyer pays — and someone may set their own price against it.
 // `note` is the backend's sentence, written to be shown as it is.
+// Flag and currency always come off the item — where it actually came from —
+// never from the region that was asked for. The reader falls through
+// storefronts: asked for GB it can answer from DE, and the item then says
+// storefront "DE", currency "EUR". Labelling from the dropdown printed a German
+// price under a UK flag. USD only when the item names neither.
+export const itemCurrency = (item) => item.currency || currencyForRegion(item.storefront) || 'USD'
+
+// Why this price is what it is — another storefront answered, an import price,
+// a converted figure. Shown, not only a tooltip: it changes what the number means.
+export function PriceNote({ item }) {
+  if (!item.priceNote) return null
+  return <div className="text-muted small mt-1">{item.priceNote}</div>
+}
+
 export function EstimatedBadge({ estimated, note }) {
   if (!estimated) return null
   return (

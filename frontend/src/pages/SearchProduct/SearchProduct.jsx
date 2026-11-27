@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FiSearch, FiAlertCircle, FiPlus, FiUpload } from 'react-icons/fi'
 import { useRecentSearches } from '../../hooks/useRecentSearches'
+import { isProviderError, isUnpriced } from './ProviderError'
 import PageHeader from '../../components/common/PageHeader'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
@@ -80,6 +81,8 @@ export default function SearchProduct() {
   // identified. Both belong on screen: "this is your product" and "this is what
   // it competes with" are two halves of one answer.
   const [rivals, setRivals] = useState(null)   // { title, result } | null
+  // What the last competitor search ran on, so Try again can repeat it.
+  const lastSimilar = useRef(null)
   const [rivalsBusy, setRivalsBusy] = useState(false)
   const rivalsRef = useRef(null)
 
@@ -179,8 +182,15 @@ export default function SearchProduct() {
       const seed = found?.matches?.[0] || found?.items?.[0]
       if (IDENTIFIER_KEYS.includes(f.key) && seed?.title) findSimilar(seed, f)
 
+      // Only a search that LOOKED and found nothing is worth re-asking as the
+      // other identifier type. One that never reached the marketplace (or
+      // failed outright) answered nothing, and a second try would replace its
+      // "couldn't reach" message with a second failure under another name.
+      // UNPRICED found the product (it just has no price), so the identifier
+      // was right and asking again under another type would be wrong too.
+      const looked = found && !isProviderError(found) && !isUnpriced(found)
       const empty = !seed && !(found?.rejected?.length)
-      if (empty && !retried) retryAs = alternateKey(f.key, f.value)
+      if (looked && empty && !retried) retryAs = alternateKey(f.key, f.value)
     } finally {
       setBusy(false)
       setRefreshing(false)
@@ -203,6 +213,7 @@ export default function SearchProduct() {
   // this exists to get away from. Region, markets, destination and result count
   // all carry over, so the two searches are comparable.
   const findSimilar = async (r, f = form) => {
+    lastSimilar.current = [r, f]
     // Word by word, widest last. One query is a guess at how specific to be:
     // the full title finds nothing because no rival writes it the same way,
     // and two words find the wrong product. So it steps outwards and stops at
@@ -234,7 +245,9 @@ export default function SearchProduct() {
         payload.judge = true
         last = await marketplaceService.channelSearch(payload)
         const anything = (last?.matches?.length || last?.rejected?.length || last?.items?.length)
-        if (anything) {
+        // Unreachable is not empty: widening the query would only ask a
+        // marketplace that isn't answering again, and then report "nothing".
+        if (anything || isProviderError(last)) {
           setRivals({ title: query, result: last, tried })
           return
         }
@@ -362,7 +375,8 @@ export default function SearchProduct() {
           ) : (
             // similarMode opens the rejected list and renames it: a listing that
             // is NOT the same product is precisely what was asked for here.
-            <JudgedListings result={rivals.result} similarMode />
+            <JudgedListings result={rivals.result} similarMode
+              onRetry={lastSimilar.current ? () => findSimilar(...lastSimilar.current) : undefined} />
           )}
         </Card>
         </div>
